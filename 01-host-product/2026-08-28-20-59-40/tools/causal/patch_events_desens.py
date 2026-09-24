@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 r"""W3 隐私补丁:all-real-events.jsonl 文本字段残留真名/别名 → 官方 Z 码。
 
-映射来源(单一权威):incoming_real\identities-v1.json(66 身份,W2 定稿,用户裁决记录在 review_note);
-昵称桥接:name_scan.BASE_NAMES 的别名表(Z01/Z-ALIAS/Z18/Z-UNMAPPED/Z46 → 对应真名 → 同码)。
-无 Z 码身份(P056 Z-UNMAPPED / P066 Z-UNMAPPED,用户裁决"保持待确认")用其 P-id 作占位码。
-只改字符串值(最长优先、单趟替换);event_id/事件数/结构不变,末尾自检 393 与 id 集合一致。
+映射来源(单一权威):incoming_real\identities-v1.json(身份表,W2 定稿,用户裁决记录在 review_note);
+昵称桥接:name_scan 的别名表(昵称 → 对应全名 → 同码)。
+无代号身份(用户裁决"保持待确认")用其 P-id 作占位码。
+只改字符串值(最长优先、单趟替换);event_id/事件数/结构不变,末尾自检事件数与 id 集合一致。
 """
 import io
 import json

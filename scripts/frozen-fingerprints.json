@@ -1,6 +1,8 @@
 {
+  "_public_layer_note": "这是**公开层**版本的冻结指纹清单：只含公开层内可核验的产物。原始 13 项中另有 8 项属私有层（语料/交付包），不随本仓库发布。",
   "schema": "jvs-frozen-fingerprints/1",
   "created": "2026-09-16",
+  "updated": "2026-09-24",
   "note": "字节冻结策略的验收基线。git 化与任何签出之后，这些 SHA256 必须保持不变。",
   "policy": "* -text（不做 EOL 转换），详见 GIT-POLICY.md 第三节",
   "items": [
@@ -8,16 +10,7 @@
       "label": "因果工具链-主流水线",
       "path": "01-host-product/2026-08-28-20-59-40/tools/causal/s4_pipeline.py",
       "sha256": "a464c610abeffdd601be5c8b6f2a2e6ea60cdd726562419bc6605aff999ba86c",
-      "bytes": 33856,
-      "baseline_revision": {
-        "date": "2026-09-20",
-        "from": {
-          "sha256": "488a0361cc5cc26e6bc58be2f50043e343c21f06c4906bf08b39a9ffc89dee40",
-          "bytes": 31623
-        },
-        "reason": "基线陈旧，非完整性破坏。c0aa8bf（2026-09-20）有意修复 semantic-emb 通道的静默降级缺陷：embed_batch 由「单请求投全量」改为「按 64 条分批 + 3 次重试 + 失败打 WARN」。实测单请求投 393 条时 Ollama 必返 HTTP 400（内部 tokenize 子服务连接被拒），而原 except Exception: return None 把错误吞掉 ⇒ 该通道约 60% 概率静默消失、候选池在 11,865/11,846 之间漂移，冻结产物不可稳定复现。同时修正文件内自相矛盾的 docstring（原写「embedding 留接口桩」而实现早已是真嵌入）。未改阈值与打分口径，不触碰任何冻结产物。",
-        "evidence": "修复后连跑 3 次 candidates，与冻结产物 candidates-m1.jsonl 的 800 条逐条一致（pair/score/channels 全同，semantic-emb 命中 9/9）；修复前对照运行有 799 条 pair、40 条 score、31 条 channels 不同。"
-      }
+      "bytes": 33856
     },
     {
       "label": "因果工具链-评判器",
@@ -40,65 +33,8 @@
     {
       "label": "隐私闸门-真名扫描",
       "path": "01-host-product/2026-08-28-20-59-40/tools/host/name_scan.py",
-      "sha256": "a66fcd8b112a2a65bf15c52645f3210a9aea52475fe579d7f741bd228319baa7",
-      "bytes": 6150,
-      "baseline_revision": {
-        "date": "2026-09-18",
-        "from": {
-          "sha256": "a7e2d11f9ddcc6a9aa2f945d73bf8b37637dd736637b3446f926d1e545d5abe5",
-          "bytes": 4951
-        },
-        "reason": "基线陈旧，非完整性破坏。d381b38（2026-09-16）有意修复 name_scan.py 误报缺陷（新增 _is_non_person() 改读结构化字段，消除 10 条占位/非自然人条目的误报，实测 100 条真实载荷命中数 213->213 无回归，不削弱泄露闸门），但未同步更新本基线。",
-        "evidence": "旧 sha256 a7e2d11f... 经 git cat-file blob 7c06105e 复算确认，等于 4eb02df（subtree 导入）时的版本，即修复前状态。"
-      }
-    },
-    {
-      "label": "冻结语料-393事件",
-      "path": "01-host-product/2026-08-28-20-59-40/docs/host_memory_dump/all-real-events.jsonl",
-      "sha256": "7bfcf27dc61862c7ae24bbc2523c82ea93c46fd9b8be7217ac0fcc63ad9c97d9",
-      "bytes": 151495
-    },
-    {
-      "label": "冻结图谱-549边",
-      "path": "01-host-product/2026-08-28-20-59-40/docs/host_memory_dump/all-real-edges-final.jsonl",
-      "sha256": "8b89aa7c03e663643f9c764bab8901451e9d75e1cf55ff0924fc68aff45f7b8c",
-      "bytes": 363003
-    },
-    {
-      "label": "冻结图库-v3",
-      "path": "01-host-product/2026-08-28-20-59-40/docs/host_memory_dump/causal_graph_final_v3.db",
-      "sha256": "3190a9b1ce7a2afb01399793f90cc092841aa0be911155ef4f35e50b3e6ae0de",
-      "bytes": 245760
-    },
-    {
-      "label": "冻结题集-30题",
-      "path": "01-host-product/2026-08-28-20-59-40/docs/host_memory_dump/query-set-real-v1.jsonl",
-      "sha256": "3f695b28d28f52fb3cccd64fbac2e9bfc09816cee0622ee9c4ba945744eb5dd0",
-      "bytes": 26216
-    },
-    {
-      "label": "验收台账-233单元",
-      "path": "03-d10-workspace/2026-09-08-20-30-19/outputs/full-review-full-20260909/acceptance-ledger.json",
-      "sha256": "39f7bae9feb46d02fac3dab420766ddc48543904564270dbf5a7e2a3e77471af",
-      "bytes": 793017
-    },
-    {
-      "label": "交付包-事件复核",
-      "path": "03-d10-workspace/2026-09-08-20-30-19/outputs/full-review-full-20260909/final-review-package/event-reviews.json",
-      "sha256": "b2b9e2f746e2234b5f5090218f0aadb05898d43a28008f2b60b82be92922a95c",
-      "bytes": 7114115
-    },
-    {
-      "label": "交付包-裁决日志",
-      "path": "03-d10-workspace/2026-09-08-20-30-19/outputs/full-review-full-20260909/final-review-package/adjudication-log.json",
-      "sha256": "cb2b89e9878a2f026d736283668a6e9967abe36775fe84ab26947680725c946b",
-      "bytes": 1947616
-    },
-    {
-      "label": "交付包-证据索引",
-      "path": "03-d10-workspace/2026-09-08-20-30-19/outputs/full-review-full-20260909/final-review-package/evidence-index.json",
-      "sha256": "ce693eab9029882e02ef212dbd8a28760aa0e15dcf6365b8d8149b07856fdf5c",
-      "bytes": 122660
+      "sha256": "48db1a71b1495fc84293dec9bbbce073e93fa0763712189429468f73ec90e355",
+      "bytes": 7749
     }
   ]
 }

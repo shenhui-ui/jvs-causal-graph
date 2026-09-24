@@ -6,8 +6,38 @@
 # ============================================================
 set -u
 cd "$(dirname "$0")/.." || exit 1
-# 解释器路径可覆盖：设 JVS_PY 即换机可用；不设则与既有硬编码值逐字节相同。
-PY="${JVS_PY:-C:/Users/<user>/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe}"
+
+# ---- 解释器探测（可移植；2026-09-24 公开层适配）----
+# ⚠️ 为什么必须改（**这是本文件最严重的历史缺陷，勿回退**）：
+#   原写法把本机用户名**硬编码**在解释器路径里，而公开层已把用户名脱敏为占位符
+#   ⇒ `[ -x "$PY" ]` 为假 ⇒ 走 else 分支打印「(解释器不可用，跳过内容扫描)」
+#   ⇒ **跳过整个「内容模式」扫描**（也就是「源码里有没有 sk- 真凭证」这一唯一
+#      真正查内容的步骤），最后仍然打印「**扫描通过: 未发现凭证泄漏**」exit 0。
+#   实测（2026-09-24）：往公开集注入 `sk-liveABCDEFGHIJKLMNOPQRSTUVWX` 后，
+#   本脚本**依旧 exit 0 报通过** —— 即**公开层的凭证闸门是恒真探针**（红线 10）。
+#
+# ⇒ 处置：**fail-closed** —— 探测不到解释器时**判失败**，绝不当「跳过=放行」。
+#   「工具跑不了」与「没有凭证」是两件事，前者必须报出来（同 git-gate.sh [5] 步哲学）。
+probe_py(){
+  local c
+  for c in "$@"; do
+    [ -n "$c" ] || continue
+    if "$c" --version >/dev/null 2>&1; then printf '%s' "$c"; return 0; fi
+  done
+  return 1
+}
+CUR_VER=""
+if [ -f "$HOME/.workbuddy-ai/binaries/python/versions/current" ]; then
+  CUR_VER="$(tr -d ' \r\n' < "$HOME/.workbuddy-ai/binaries/python/versions/current")"
+fi
+PY="$(probe_py \
+  "${JVS_PY:-}" \
+  "$HOME/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe" \
+  "$HOME/.workbuddy-ai/binaries/python/versions/3.13.12/python" \
+  ${CUR_VER:+$HOME/.workbuddy-ai/binaries/python/versions/$CUR_VER/python.exe} \
+  ${CUR_VER:+$HOME/.workbuddy-ai/binaries/python/versions/$CUR_VER/python} \
+  "python3" "python" \
+)" || PY=""
 HITS=0
 
 echo "------------- 凭证扫描 -------------"
@@ -30,7 +60,11 @@ fi
 
 # ---------- 2. 内容模式扫描 ----------
 echo "[2] 内容模式（sk- / ghp_ / AKIA / AIza / 赋值式密钥）"
-if [ -x "$PY" ]; then
+# ⚠️ fail-closed（2026-09-24）：解释器不可用时**必须计为问题**。
+#   反面教材（本脚本原版）：打印「(解释器不可用，跳过内容扫描)」后**不计 HITS**
+#   ⇒ 最终仍 exit 0 报「扫描通过: 未发现凭证泄漏」⇒ 闸门恒真。
+#   ⇒ 现在的判据：**要么真的扫完，要么显式报失败**，没有第三条路。
+if [ -n "$PY" ]; then
   "$PY" -B - <<'PYEOF'
 import os, re, sys
 PATS = [
@@ -85,7 +119,9 @@ sys.exit(1 if hits else 0)
 PYEOF
   [ $? -ne 0 ] && HITS=$((HITS+1))
 else
-  echo "  (解释器不可用，跳过内容扫描)"
+  echo "  [FAIL] 未探测到可用 Python 解释器 —— **内容扫描未执行**（不得当作通过）"
+  echo "         可用 JVS_PY=<python 路径> 指定解释器后重跑。"
+  HITS=$((HITS+1))
 fi
 
 # ---------- 3. 受限素材不得进入版本库 ----------

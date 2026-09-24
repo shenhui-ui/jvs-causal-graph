@@ -3,12 +3,20 @@
 r"""真名扫描闸门:发送前哨兵——扫描文件/目录中是否残留已知真名/别名。
 
 用法:
-  python name_scan.py --check <payload.txt | dump.jsonl | dir>
-  python name_scan.py --names <names.json>          # 自定义姓名表(默认内置表+identities-init.json)
-返回码:0=干净;1=命中(输出命中行摘录)。
+  python name_scan.py --check <payload.txt | dump.jsonl | dir> --names <names.json>
+  python name_scan.py --check <dir> --names-dir <dir>   # 读目录下所有 *.json 词表并合并
+返回码:0=干净;1=命中(输出命中行摘录);2=输入或词表错误(拒绝放行)。
 
-内置表:身份表(canonical_name/aliases) + 业务昵称别名(Z-UNMAPPED/Z18/Z01/Z-ALIAS/Z-UNMAPPED)。
+⭐ 词表必须**外部提供**（本文件不含任何真实姓名）。
+   词表格式（两种皆可，可混用）:
+     A) {"identities": [{"canonical_name": "...", "aliases": ["..."], ...}, ...]}
+     B) {"<姓名>": ["<别名1>", "<别名2>"], ...}
+   结构见同目录 `names-example.json`（**虚构**示例）。
+
+⚠️ **未提供词表 / 词表为空 ⇒ 本脚本拒绝运行并返回 2**。
+   理由:「空词表 ⇒ 扫描通过」会输出**虚假的干净结论** —— 这比报错危险得多。
 """
+
 import argparse
 import io
 import json
@@ -16,45 +24,19 @@ import os
 import re
 import sys
 
-BASE_NAMES = {
-    "Z01": ["Z01", "Z-ALIAS"], "Z02": [], "Z03": [], "Z04": [], "Z06": [],
-    "Z07": [], "Z09": [], "Z10": [], "Z11": [], "Z12": [], "Z14": [],
-    "Z15": [], "Z16": [], "Z17": [], "Z18": ["Z18"], "Z26": [], "Z30": [],
-    "Z31": [], "Z46（Z46）": ["Z46"], "Z38": [], "Z32": [], "Z33": [],
-    "Z35": [], "Z36": [], "Z37": [], "Z39": [], "Z40": [], "Z41": [],
-    "Z42": [], "Z43": [], "Z44": [], "Z45": [], "Z47": [], "Z48": [],
-    "Z49": [], "Z50": [], "Z52": [], "Z53": [], "Z54": [], "Z55": [],
-    "Z57": [], "Z58": [], "Z59": [], "Z60": [], "Z61": [], "Z62": [],
-    "Z63": [], "Z64": [], "Z65": [], "Z66": [], "Z67": [], "Z68": [],
-    "Z69": [], "Z70": [], "Z-UNMAPPED": ["Z-UNMAPPED"], "Z-UNMAPPED": [], "陈": [],
-}
-
-
-def load_names(extra=""):
-    names = dict(BASE_NAMES)
-    if extra:
-        with io.open(extra, encoding="utf-8") as f:
-            data = json.load(f)
-        for it in data.get("identities", []):
-            cn = it.get("canonical_name")
-            if cn and len(cn) >= 2 and not _is_non_person(it):
-                names.setdefault(cn, [])
-                names[cn].extend(it.get("aliases", []))
-    return names
-
-
-# 占位符 canonical_name 前缀:identities-init 中以「Z19」等命名的临时条目
-# (note 明示「真名未取得,待人工补全」),本身不是真名,不构成「残留真名」判据。
-_PLACEHOLDER_PREFIXES = ("未映射", "未识别", "未知", "待补全")
+# ⭐ 公开版**不内置任何真实姓名**。
+#    原版把 57 个真实姓名硬编码在此处 ⇒ 「公开代码即泄露姓名」。
+#    现改为从 `--names` / `--names-dir` 读入（见 load_names）。
+BASE_NAMES = {}
 
 
 def _is_non_person(identity):
     """基于 identities 条目的**结构化字段**判定其是否应排除出真名扫描词表。
 
     只认结构化证据,不按名称子串猜测——漏报真名是安全风险,故排除须有据:
-      ① canonical_name 为占位符(如「Z19」:真名未取得,待人工补全);
-      ② note 明示非自然人(如「Z34」:无凭据系统号,排除出人物归一)。
-    纯英文别名(如 Z46)不排除——它确为真人别名。
+      ① canonical_name 为占位符(如「未映射-01」:真名未取得,待人工补全);
+      ② note 明示非自然人(如「无凭据系统号,排除出人物归一」)。
+    纯英文别名不排除——它确为真人别名。
     """
     cn = str(identity.get("canonical_name") or "").strip()
     if any(cn.startswith(p) for p in _PLACEHOLDER_PREFIXES):
@@ -65,8 +47,70 @@ def _is_non_person(identity):
     return False
 
 
+# 占位符 canonical_name 前缀(以「待补全」等命名的临时条目),
+# 本身不是真名,不构成「残留真名」判据。
+_PLACEHOLDER_PREFIXES = ("未映射", "未识别", "未知", "待补全")
+
+
+def _merge_into(names, obj):
+    """把一份词表对象并入 names（dict: 姓名 -> [别名...]）。"""
+    if not isinstance(obj, dict):
+        return
+    # 格式 A：{"identities": [...]}
+    for it in (obj.get("identities") or []):
+        if not isinstance(it, dict):
+            continue
+        cn = str(it.get("canonical_name") or "").strip()
+        if cn and len(cn) >= 2 and not _is_non_person(it):
+            names.setdefault(cn, [])
+            names[cn].extend([a for a in (it.get("aliases") or []) if isinstance(a, str)])
+    # 格式 B：{"姓名": [别名...]}（跳过 identities 键自身）
+    for k, v in obj.items():
+        if k == "identities" or not isinstance(k, str):
+            continue
+        if len(k) < 2:
+            continue
+        names.setdefault(k, [])
+        if isinstance(v, list):
+            names[k].extend([a for a in v if isinstance(a, str)])
+
+
+def load_names(names_file="", names_dir=""):
+    """从外部文件/目录读入真名词表。
+
+    ⚠️ 词表缺失或为空 ⇒ 主动 `SystemExit`，**不返回空模式**。
+    """
+    names = dict(BASE_NAMES)
+    loaded = []
+
+    def _read(path):
+        with io.open(path, encoding="utf-8") as f:
+            return json.load(f)
+
+    if names_file:
+        if not os.path.isfile(names_file):
+            raise SystemExit("[闸门-致命] 词表文件不存在: %s" % names_file)
+        _merge_into(names, _read(names_file))
+        loaded.append(names_file)
+
+    if names_dir:
+        if not os.path.isdir(names_dir):
+            raise SystemExit("[闸门-致命] 词表目录不存在: %s" % names_dir)
+        for fn in sorted(os.listdir(names_dir)):
+            if fn.lower().endswith(".json"):
+                _merge_into(names, _read(os.path.join(names_dir, fn)))
+                loaded.append(os.path.join(names_dir, fn))
+
+    if not loaded:
+        raise SystemExit(
+            "[闸门-致命] 未提供词表 —— 拒绝运行。\n"
+            "  请用 --names <file> 或 --names-dir <dir> 指定词表（结构见 names-example.json）。\n"
+            "  ⚠️ 空词表会输出**虚假的干净结论**，故本脚本选择报错而不是放行。")
+    return names
+
+
 def build_pattern(names):
-    # 全名(最长优先)+ 别名;单字名(如"陈")与 Z 码(如 Z02)不参与(误杀/无意义)。
+    # 全名(最长优先)+ 别名;单字名与纯代号(如 Z02)不参与(误杀/无意义)。
     # 占位符与非自然人条目已由 load_names 按结构化字段事先剔除。
     terms = set()
     for nm, als in names.items():
@@ -75,6 +119,10 @@ def build_pattern(names):
         for a in als:
             if len(a) >= 2 and not re.fullmatch(r"[A-Z]\d+", a):
                 terms.add(a)
+    if not terms:
+        raise SystemExit(
+            "[闸门-致命] 词表读入成功但**有效词条为 0** —— 拒绝运行。\n"
+            "  ⚠️ 用空模式去扫描会输出**虚假的干净结论**。")
     pat = "|".join(re.escape(t) for t in sorted(terms, key=len, reverse=True))
     return re.compile(pat)
 
@@ -84,7 +132,6 @@ def scan_text(text, pat, names=None):
     for m in pat.finditer(text):
         s = m.group(0)
         line_no = text[:m.start()].count("\n") + 1
-        # 排除出现在映射表头/代码注释类的豁免(简单豁免:行含 '= ' 且附近是 '| ' 表行)
         hits.append((line_no, s))
     return hits
 
@@ -92,10 +139,11 @@ def scan_text(text, pat, names=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", required=True)
-    ap.add_argument("--names", default="")
+    ap.add_argument("--names", default="", help="词表文件（JSON）")
+    ap.add_argument("--names-dir", default="", help="词表目录（合并其中所有 *.json）")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
-    names = load_names(args.names)
+    names = load_names(args.names, args.names_dir)
     pat = build_pattern(names)
 
     hits = []

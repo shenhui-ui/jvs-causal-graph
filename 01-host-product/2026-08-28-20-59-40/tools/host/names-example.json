@@ -1,0 +1,24 @@
+{
+  "_comment": "⭐ 这是**虚构**示例词表，仅用于演示结构。真实词表不得入库。",
+  "_usage": "python name_scan.py --check <target> --names names-example.json",
+  "schema": "name-scan-names/1",
+  "_format_note": "支持两种格式混用：A) identities 数组（推荐，可带 note 供 _is_non_person 结构化排除）；B) 顶层 姓名->[别名] 映射。",
+  "identities": [
+    {
+      "canonical_name": "示例甲",
+      "aliases": ["甲甲", "小甲"],
+      "note": "虚构示例条目"
+    },
+    {
+      "canonical_name": "示例乙",
+      "aliases": ["乙乙"],
+      "note": "虚构示例条目"
+    },
+    {
+      "canonical_name": "待补全-01",
+      "aliases": [],
+      "note": "真名未取得，待人工补全 —— 此类占位符会被 _is_non_person 自动排除出扫描词表"
+    }
+  ],
+  "示例丙": ["丙丙"]
+}

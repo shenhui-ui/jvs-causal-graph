@@ -12,6 +12,20 @@ cd "$ROOT" || exit 0
 # ============================================================
 # [0] ⭐ 红线 1 机械守卫：「禁止直接向 main 提交」
 # ------------------------------------------------------------
+# ⚠️ 公开层差异（2026-09-24，**必须先读**）：
+#   本条守卫的**前提**在公开层不成立 —— 它拦的是「**多分支工作流**里直提 main」，
+#   而公开层是**单线线性历史的发布仓库**：
+#     · 它没有需要 `--no-ff` 合并的分支（`git log` 无合并节点）；
+#     · 若把本守卫原样启用 ⇒ **公开层将一个提交都提不进去**
+#       （实测 2026-09-24：`bash .githooks/pre-commit` 直接 exit 1）。
+#   ⇒ 判据改为**按层**：检出私有分区 ⇒ 启用原守卫；否则跳过并打印提示。
+#   ⚠️ 反方案（已否决）：把 `JVS_ALLOW_COMMIT_MAIN` 默认设为 1
+#      —— 那会**同时关掉私有层的守卫**（逃生开关变成默认值），
+#      属「为了让公开层能提交而削弱私有层」，比锁死更坏。
+#   ⚠️ 判据取「私有分区目录是否存在」，与 `scripts/git-gate.sh` 的层次判定**同源同义**。
+#      且**必须自包含在本文件里**（红线 10：守卫必须自包含在被测的那个函数里）——
+#      不得 source 外部脚本，否则本地钩子会在没装仓库依赖时失效。
+# ------------------------------------------------------------
 # 为什么必须在这里（而不是只放在 git-gate.sh）：
 #   git-gate 是**合入前**的人工步骤，可能被跳过；pre-commit 在**每次提交时**
 #   由 git 强制调用，是唯一无法绕过的时点。
@@ -28,9 +42,17 @@ cd "$ROOT" || exit 0
 #      已由 DEFINITION-OF-DONE §4 的收尾第三条（父数须为 3）覆盖。
 # 应急开口（须显式知情）：JVS_ALLOW_COMMIT_MAIN=1
 # ============================================================
+# ---- 层次判定（自包含；与 scripts/git-gate.sh 同源同义） ----
+PRIVATE_DIRS="02-m1-evaluation 03-d10-workspace 04-restricted-materials"
+N_PRIV=0
+for d in $PRIVATE_DIRS; do [ -d "$d" ] && N_PRIV=$((N_PRIV+1)); done
+if [ "$N_PRIV" -eq 0 ]; then LAYER="public"; else LAYER="private"; fi
+
 CUR_REF="$(git symbolic-ref -q HEAD || true)"
 if [ "$CUR_REF" = "refs/heads/main" ]; then
-  if [ "${JVS_ALLOW_COMMIT_MAIN:-0}" = "1" ]; then
+  if [ "$LAYER" = "public" ]; then
+    echo "[pre-commit] 提示：当前为 **公开层**（单线线性历史，无待合并分支）⇒ 红线 1 守卫不适用"
+  elif [ "${JVS_ALLOW_COMMIT_MAIN:-0}" = "1" ]; then
     echo "[pre-commit] ⚠️⚠️ 警告：正在向 main 直接提交（逃生开关 JVS_ALLOW_COMMIT_MAIN=1 已启用）"
     echo "                红线 1 要求走分支 + --no-ff 合并；仅限知情应急使用。"
   else
@@ -47,11 +69,42 @@ if [ "$CUR_REF" = "refs/heads/main" ]; then
   fi
 fi
 
-# 解释器路径可覆盖：设 JVS_PY 即换机可用；不设则与既有硬编码值逐字节相同。
-PY="${JVS_PY:-C:/Users/<user>/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe}"
+# ---- 解释器探测（可移植；2026-09-24 公开层适配，与 git-gate.sh 同源） ----
+# ⚠️ 原写法把本机用户名**硬编码**在解释器路径里，而公开层已把用户名脱敏为占位符
+#    ⇒ `[ ! -x "$PY" ]` 恒真 ⇒ **退化成「只查路径名」的弱检查**
+#      （不再扫内容 —— 即「暂存文件里有没有真凭证」这一唯一查内容的步骤被跳过）。
+#    ⚠️ 与 `scripts/scan-secrets.sh` 的历史缺陷**同源** —— 那一个更严重（它报「通过」）；
+#      本文件只是弱化（仍会拦受限素材与凭证文件名），但**同样不该留着**。
+probe_py(){
+  local c
+  for c in "$@"; do
+    [ -n "$c" ] || continue
+    if "$c" --version >/dev/null 2>&1; then printf '%s' "$c"; return 0; fi
+  done
+  return 1
+}
+CUR_VER=""
+if [ -f "$HOME/.workbuddy-ai/binaries/python/versions/current" ]; then
+  CUR_VER="$(tr -d ' \r\n' < "$HOME/.workbuddy-ai/binaries/python/versions/current")"
+fi
+PY="$(probe_py \
+  "${JVS_PY:-}" \
+  "$HOME/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe" \
+  "$HOME/.workbuddy-ai/binaries/python/versions/3.13.12/python" \
+  ${CUR_VER:+$HOME/.workbuddy-ai/binaries/python/versions/$CUR_VER/python.exe} \
+  ${CUR_VER:+$HOME/.workbuddy-ai/binaries/python/versions/$CUR_VER/python} \
+  "python3" "python" \
+)" || PY=""
 
-if [ ! -x "$PY" ]; then
-  # 解释器不可用时退化为路径级检查
+if [ -z "$PY" ]; then
+  # 解释器不可用时退化为路径级检查（**保留，但明确告警**）
+  # ⚠️ 口径说明（**有意与 git-gate.sh 不同**）：
+  #    `git-gate.sh` 是**人工步骤**，可 fail-closed（解释器缺失即判 FAIL）；
+  #    本文件在**每次提交**时由 git 强制调用 ⇒ 若因环境问题一律拒提交，
+  #    会让「环境故障」与「真的有问题」无法区分（人只会开始用 --no-verify）。
+  #    ⇒ 此处保留降级 + **显式告警**，完整性由 git-gate.sh 兜底。这是有意的差异。
+  echo "[pre-commit] ⚠️ 未探测到 Python 解释器 —— 退化为路径级检查（**内容扫描未执行**）"
+  echo "                建议设 JVS_PY=<python 路径> 后跑 bash scripts/git-gate.sh 做完整校验。"
   if git diff --cached --name-only --diff-filter=ACM 2>/dev/null \
      | grep -qE '^04-restricted-materials/|\.doubao_session\.json$'; then
     echo "[pre-commit] 拒绝：暂存区含受限素材或凭证文件"

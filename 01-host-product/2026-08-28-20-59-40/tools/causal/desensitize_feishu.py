@@ -25,7 +25,11 @@ LINK_RE = re.compile(r"https?://\S+")
 UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 TOKEN_RE = re.compile(r"token=[A-Za-z0-9]{6,}")
 # v2:正文真名/昵称→代号(昵称映射到真名,再走 code_of)
-ALIAS = {"Z-UNMAPPED": "Z-UNMAPPED", "Z18": "Z18", "Z01": "Z01", "Z-ALIAS": "Z01"}
+# ⚠️ 昵称→全名 的映射**不在源码内**（真实姓名不得入库）。
+#    改为从 `--alias <alias.json>` 外部读入，或用 `--extra-names` 的 `别名=全名` 形式提供。
+#    结构：{"别名": "全名", ...}
+#    未提供时为空字典 ⇒ 昵称不会被映射到全名（**会漏**），故运行时会打印告警。
+ALIAS = {}
 
 
 def clean_text(s):
@@ -65,9 +69,13 @@ def main():
     ap.add_argument("--input", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--mapping", default="")
-    ap.add_argument("--known", default="", help="形如 Z18=Z18,Z26=Z26 的既有映射")
+    ap.add_argument("--known", default="", help="形如 姓名A=Z18,姓名B=Z26 的既有映射")
+    ap.add_argument("--alias", default="",
+                    help="昵称→全名 映射文件(JSON: {\"别名\": \"全名\"})。"
+                         "⚠️ 不提供 ⇒ 昵称不会被映射到全名，正文会漏脱敏。")
     ap.add_argument("--extra-names", default="",
-                    help="正文替换表补充名单(逗号分隔;覆盖『仅出现在正文,非发送者』的人,如 Z39,Z01,Z-UNMAPPED)")
+                    help="正文替换表补充名单(逗号分隔;覆盖『仅出现在正文,非发送者』的人，"
+                         "也可用『别名=全名』形式同时建立昵称映射)")
     args = ap.parse_args()
 
     known = {}
@@ -75,6 +83,18 @@ def main():
         if "=" in pair:
             k, v = pair.split("=", 1)
             known[k.strip()] = v.strip()
+
+    # ⭐ 昵称 → 全名 映射：从外部文件读入（源码内不得含真实姓名）
+    if args.alias:
+        if not os.path.isfile(args.alias):
+            raise SystemExit("[致命] --alias 指定的文件不存在: %s" % args.alias)
+        _a = json.load(io.open(args.alias, encoding="utf-8"))
+        if not isinstance(_a, dict) or not _a:
+            raise SystemExit("[致命] --alias 文件必须是非空 JSON 对象 {别名: 全名}")
+        ALIAS.update({str(k): str(v) for k, v in _a.items()})
+        print("[提示] 已载入 %d 条昵称映射(%s)" % (len(_a), args.alias))
+    else:
+        print("[警告] 未提供 --alias ⇒ 昵称不会被映射到全名，正文**可能漏脱敏**")
 
     data = json.load(io.open(args.input, encoding="utf-8"))
     msgs = data.get("data", {}).get("messages", [])
