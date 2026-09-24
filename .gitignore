@@ -1,0 +1,89 @@
+# ============================================================
+# JVS 仓库忽略规则
+# ------------------------------------------------------------
+# 原则：只排除「可再生 / 缓存 / 凭证 / 受限素材」，业务产物一律纳入。
+# 决策依据见 GIT-POLICY.md（2026-09-16 实测：全纳入仅约 78 MB）
+#   工作树 3,902 MB / 21,166 文件 -> 去重压缩后仓库约 78 MB
+#   .sse 工作树 3,530 MB，但唯一内容仅 207 个、压缩后约 5 MB
+#   => 排除 .sse 只省约 5 MB，却丢失失败尝试的思考链与完整性校验能力
+#   故 .sse / .zip / 图片 全部纳入版本库
+# ============================================================
+
+# ---------- 受限素材：未脱敏真名，独立仓库，不进主线 ----------
+/04-restricted-materials/
+
+# ---------- 凭证与会话：绝不入库 ----------
+**/.doubao_session.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+**/*credentials*.json
+**/*secrets*.json
+**/id_rsa*
+**/id_ed25519*
+.netrc
+
+# ---------- Python 缓存 ----------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.venv/
+venv/
+env/
+!_handoff/env/
+
+# ---------- 运行时日志与进程状态 ----------
+*.log
+*.pid
+*.pid.lock
+
+# ---------- SQLite 瞬时文件（.db 快照是项目产物，须保留） ----------
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+
+# ---------- 构建与打包输出 ----------
+build/
+dist/
+*.egg-info/
+node_modules/
+
+# ---------- 编辑器与系统文件 ----------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# ---------- 临时与补丁残留 ----------
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+
+# ---------- 治理工具自身产物 ----------
+/_migrate/__pycache__/
+
+# ---------- 恢复期临时介质（2026-09-16 事故恢复，不入库）----------
+# 2026-09-16 一次被中断的 merge 使 .git 受损（refs 丢失、pack 被移入回收站）。
+# 恢复所用碎片体积大且为一次性证据，不入版本库；过程与结论见 GIT-POLICY.md 第十节。
+/_migrate/_git-damaged-20260916/
+/_migrate/_loose-recovered/
+/_migrate/_pack-recovered/

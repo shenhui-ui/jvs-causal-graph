@@ -1,0 +1,42 @@
+# ============================================================
+# JVS 仓库属性：产物「字节冻结」
+# ------------------------------------------------------------
+# 为什么是字节冻结而不是 text=auto：
+#   本项目核心资产含大量需按 SHA256 核验的产物
+#   （acceptance-ledger.json / event-reviews.json / integrity.json / *.sse / *.zip）。
+#   任何行尾归一化都会改变文件字节，使既有指纹失效。
+#   故本仓库默认 * -text：提交与检出的字节与磁盘完全一致，永不做 EOL 转换。
+#
+# 例外：01-host-product/2026-08-28-20-59-40/ 保留其自带的 .gitattributes
+#   （text=auto）。该子树 633 个文件的历史已按 LF 归一化入库，
+#   若改用字节冻结会凭空造出 412 个「伪 modified」（实测 65.1%）。
+#   嵌套 .gitattributes 优先级更高，01 子树行为因此保持不变。
+# ============================================================
+
+* -text
+
+# ---------- 明确标注二进制，避免任何文本处理工具误判 ----------
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+*.sse binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# ---------- 合并策略：产物冲突时不做行级自动合并 ----------
+*.json merge=binary
+*.jsonl merge=binary
+*.sse merge=binary
+*.zip merge=binary
+*.db merge=binary
+
+# ---------- diff 展示：大体积产物不逐行 diff ----------
+*.sse -diff
+*.zip -diff
+*.db -diff

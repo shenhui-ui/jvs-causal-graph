@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# ============================================================
+# JVS pre-commit 钩子 —— 只检查「本次暂存的文件」，快速且稳健
+# 启用: git config core.hooksPath .githooks
+# 全库扫描请用: bash scripts/git-gate.sh
+# 绕过: git commit --no-verify（仅限明确知情时）
+# ============================================================
+set -u
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$ROOT" || exit 0
+
+# ============================================================
+# [0] ⭐ 红线 1 机械守卫：「禁止直接向 main 提交」
+# ------------------------------------------------------------
+# 为什么必须在这里（而不是只放在 git-gate.sh）：
+#   git-gate 是**合入前**的人工步骤，可能被跳过；pre-commit 在**每次提交时**
+#   由 git 强制调用，是唯一无法绕过的时点。
+# 事故实证：2026-09-23 本轮就实际发生过一次 —— 用 `git commit` 维护者视角直提
+#   main，提交 `20ce9fe` 为**单父**（父 = 5b811b8），违反红线 1 与
+#   DEFINITION-OF-DONE §6 第三条（main 末提交父数须为 3）。已用 plumbing
+#   回退 main 并以 `--no-ff` 重建双父合并（af66cc1），违规提交保留在历史中可追溯。
+# 判据（fail-closed；零依赖，只用 git）：
+#   HEAD 经 symbolic-ref 解析后等于 refs/heads/main ⇒ 拒绝提交。
+# 有意不做的两件事：
+#   ① **不检测 detached HEAD** —— 那种形态在本仓属异常但并非红线 1，
+#      且 `git rebase` / `cherry-pick` 会临时处于 detached，一律拦会误伤。
+#   ② **不检测 linked worktree** —— 那种风险是「合并退化成单父」，
+#      已由 DEFINITION-OF-DONE §4 的收尾第三条（父数须为 3）覆盖。
+# 应急开口（须显式知情）：JVS_ALLOW_COMMIT_MAIN=1
+# ============================================================
+CUR_REF="$(git symbolic-ref -q HEAD || true)"
+if [ "$CUR_REF" = "refs/heads/main" ]; then
+  if [ "${JVS_ALLOW_COMMIT_MAIN:-0}" = "1" ]; then
+    echo "[pre-commit] ⚠️⚠️ 警告：正在向 main 直接提交（逃生开关 JVS_ALLOW_COMMIT_MAIN=1 已启用）"
+    echo "                红线 1 要求走分支 + --no-ff 合并；仅限知情应急使用。"
+  else
+    echo "[pre-commit] 拒绝：当前 HEAD 是 refs/heads/main —— 红线 1「禁止直接向 main 提交」"
+    echo "               正确流程（全程不触碰工作区）："
+    echo "                 ① git update-ref refs/heads/<扁平分支名> \"\$(git rev-parse main)\""
+    echo "                 ② git symbolic-ref HEAD refs/heads/<扁平分支名>"
+    echo "                 ③ ... 编辑 + git add + git commit ..."
+    echo "                 ④ bash scripts/git-gate.sh   （须 FAIL=0 且 WARN=0）"
+    echo "                 ⑤ git commit-tree + git update-ref 做 --no-ff 双父合并"
+    echo "               见 GIT-POLICY.md §四 与 _handoff/DEFINITION-OF-DONE.md §4。"
+    echo "               知情应急可设 JVS_ALLOW_COMMIT_MAIN=1。"
+    exit 1
+  fi
+fi
+
+# 解释器路径可覆盖：设 JVS_PY 即换机可用；不设则与既有硬编码值逐字节相同。
+PY="${JVS_PY:-C:/Users/<user>/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe}"
+
+if [ ! -x "$PY" ]; then
+  # 解释器不可用时退化为路径级检查
+  if git diff --cached --name-only --diff-filter=ACM 2>/dev/null \
+     | grep -qE '^04-restricted-materials/|\.doubao_session\.json$'; then
+    echo "[pre-commit] 拒绝：暂存区含受限素材或凭证文件"
+    exit 1
+  fi
+  exit 0
+fi
+
+"$PY" -B - <<'PYEOF'
+import os, re, subprocess, sys
+
+def staged():
+    r = subprocess.run(["git", "diff", "--cached", "--name-only",
+                        "--diff-filter=ACM"],
+                       capture_output=True, text=True, encoding="utf-8",
+                       errors="replace")
+    return [l.strip() for l in (r.stdout or "").splitlines() if l.strip()]
+
+paths = staged()
+if not paths:
+    sys.exit(0)
+
+FAIL = False
+
+# ---------- 1. 受限素材 ----------
+bad = [p for p in paths if p.startswith("04-restricted-materials/")]
+if bad:
+    print("[pre-commit] 拒绝：04-restricted-materials/ 属未脱敏受限素材，不得进入主线")
+    for p in bad[:5]:
+        print("   " + p)
+    FAIL = True
+
+# ---------- 2. 凭证文件名 ----------
+CRED_RX = re.compile(
+    r"(^|/)(\.doubao_session\.json|\.env(\..*)?|.*credentials.*\.json|.*secrets.*\.json|"
+    r"id_rsa|id_ed25519|\.netrc)$|\.(pem|key|p12|pfx)$", re.I)
+bad = [p for p in paths if CRED_RX.search(p)]
+if bad:
+    print("[pre-commit] 拒绝：暂存区含凭证类文件")
+    for p in bad[:5]:
+        print("   " + p)
+    FAIL = True
+
+# ---------- 3. 内容扫描（限 2MB，只扫文本类） ----------
+TEXT_EXT = {".md", ".py", ".txt", ".json", ".jsonl", ".csv", ".sh", ".cjs",
+            ".js", ".html", ".yaml", ".yml", ".toml", ".cfg", ".ini"}
+PAT = re.compile(r"sk-[A-Za-z0-9_\-]{20,}|ghp_[A-Za-z0-9]{20,}|"
+                 r"AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{30,}")
+# 跳过「扫描器自身」—— 它们含正则模式字面量（如 sk- 前缀），扫自己必然假阳性。
+# ⚠️ 口径必须与 scripts/scan-secrets.sh 的 SKIP_FILE 保持一致（2026-09-21 修正）。
+# ⚠️ 2026-09-23 补入 `pre-commit`：本文件第 101 行含与 scan-secrets.sh:37 **同形**的
+#    模式字面量（`sk-[A-Za-z0-9_\-]{20,}`）。当前**实测未命中**（全库扫描 rc=0，
+#    因紧邻的 `{20,}` 会打断字面量里的字符连续段），但这是**脆的** ——
+#    任何人重排该行（例如把正则拆成两段、或写进示例注释）都会让本文件永远无法提交
+#    （除非 --no-verify，而项目纪律禁止无理由跳过钩子）。
+#    这是 2026-09-21 已发生过的同类事故（当时修的是 scan-secrets.sh 自己）。
+#    ⇒ 按同一语义登记，**不是放宽防护**：跳过的仍是同一组「扫描器自身」文件。
+SKIP_FILE = {"scan-secrets.sh", "git-gate.sh", "pre-commit"}
+ALLOW_FILE = "test_targeted_round.py"
+hits = []
+scanned = 0
+for p in paths:
+    if os.path.splitext(p)[1].lower() not in TEXT_EXT:
+        continue
+    if os.path.basename(p) in SKIP_FILE:
+        continue
+    if not os.path.isfile(p):
+        continue
+    try:
+        if os.path.getsize(p) > 2 * 1024 * 1024:
+            continue
+        txt = open(p, "r", encoding="utf-8", errors="ignore").read()
+    except Exception:
+        continue
+    scanned += 1
+    if ALLOW_FILE in p:
+        continue
+    for m in PAT.finditer(txt):
+        hits.append((p, m.group(0)[:50]))
+if hits:
+    print("[pre-commit] 拒绝：暂存文件疑似含凭证")
+    for p, s in hits[:5]:
+        print(f"   {p}  ->  {s}")
+    FAIL = True
+
+# ---------- 4. 大文件提示 ----------
+big = []
+for p in paths:
+    if os.path.isfile(p):
+        sz = os.path.getsize(p)
+        if sz > 52428800:
+            big.append((sz, p))
+if big:
+    print("[pre-commit] 注意：暂存区含 >50MB 文件（未阻塞）")
+    for sz, p in sorted(big, reverse=True)[:5]:
+        print(f"   {sz/1048576:.1f} MB  {p}")
+
+if not FAIL:
+    print(f"[pre-commit] 检查通过（{len(paths)} 个暂存文件，内容扫描 {scanned} 个）")
+
+sys.exit(1 if FAIL else 0)
+PYEOF
+exit $?
