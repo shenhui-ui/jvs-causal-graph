@@ -96,6 +96,19 @@ python name_scan.py --check <目标> --names names-example.json
 bash scripts/scan-secrets.sh
 ```
 
+### 5. 启用提交守卫（一次性）
+
+`.githooks/` 下的钩子**不会随克隆自动生效**，需手动指向一次：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+之后每次 `git commit` 都会先跑 `.githooks/pre-commit`（工作区状态、语法核验、
+红线守卫等）。不想启用时 `git config --unset core.hooksPath` 即可。
+
+> ⚠️ 若你的解释器不在默认路径，设 `JVS_PY` 指向它，否则守卫会报「未探测到可用解释器」。
+
 ---
 
 ## 目录总览（公开层实际内容）
