@@ -196,6 +196,59 @@ PENDING = [
      "裁定 2026-09-19 #6 只接纳「已验证的本地归一化输入映射」；canonical corpus 命名 / 历史分段参数 / 上游身份 / 独立语义证据仍须分别明确，v4 包中均为 false、canonical_corpus 保持 null"),
     ("WSL 安装", "待规划",
      "需管理员提权 + 重启，留给用户决策"),
+    ("⭐ 公开镜像仓库已过期：公开层内容变了，但**未重建 / 未推送**", "开发中",
+     "✅ **2026-09-25 用户已授权重建 + 推送**（`1授权`），本轮执行。"
+     "**背景**：2026-09-24 已把本仓库的「公开层」拆出并上线 `shenhui-ui/jvs-causal-graph`（Public，"
+     "4 提交 / 179 文件 / HEAD `8070db6`，身份 `shenhui-ui <287625239+…@users.noreply.github.com>`）。"
+     "**本地公开层已变更**：09-24 第二轮新增 `_handoff/skills/通用/repo-public-private-split/SKILL.md`、"
+     "改 `_handoff/skills/README.md` / `HANDOFF.md` / `PENDING.md` / `SCRIPTS.md` / `status_map.py` / "
+     "`git-sigterm-safe-recovery/SKILL.md` —— 这些路径**都在构建白名单内**（`_handoff/` 与 `_migrate/` 属 `PREFIXES`）"
+     "⇒ **远端落后于本地公开层**。"
+     "**工具（均在工作区之外，未入库）**：`_staging/jvs-build-public.py`（含 `GLOBAL_REWRITE` 清洗表）、"
+     "`_staging/split/public-jvs`（公开层工作副本）、交付文档 `_staging/SPLIT-DELIVERY-20260924.md`。"
+     "**核验手法（沿用）**：从 GitHub **真实 clone** 一份，在其上跑原生扫描 + `git-gate.sh`，"
+     "优于逐文件 `curl raw`（后者对 179 文件逐个请求会被 SIGTERM 打断）。"
+     "⚠️ 重建前先跑身份串扫描 —— 已实证「技能正文可能含真实手机号邮箱，而 `GLOBAL_REWRITE` **不覆盖**手机号邮箱」。"
+     "⚠️ **`allowed()` 只决定「拷不拷」，不删「上轮已拷入」的** ⇒ 重建后须核对「消失的文件」并显式处置。"
+     "见技能 `repo-public-private-split`。"),
+    ("⭐ **拆分「计划」与「构建」口径不一致** —— `public-files.txt` 高估了公开层", "待规划",
+     "**实测（2026-09-25）**：`_staging/split/public-files.txt`（由 `jvs-split-plan.py --write` 生成的**逐文件判定**）"
+     "把仓内 `.workbuddy-ai/skills/` 下 4 个技能列为「干净 ⇒ 可公开」（第 12–15 行），"
+     "**但构建脚本 `jvs-build-public.py` 的白名单 `allowed()` 并不含仓库根 `.workbuddy-ai/`** "
+     "（`PREFIXES` 只有 `_handoff/` `_migrate/` `scripts/` `.githooks/`）⇒ **该目录一个文件都没进公开层**："
+     "实测公开仓库 `git ls-files | grep -c '^\\.workbuddy-ai/'` = **0**。"
+     "⇒ **计划清单不能当「公开层内容」用**（它只答「干不干净」，不答「会不会被拷进去」）。"
+     "⚠️ 本项**同时更正我 2026-09-24 的一处不实断言** —— 当时把「在 `public-files.txt` 里」误读成「属公开层」。"
+     "**待做**：① 在计划产物里区分「判定干净」与「实际纳入」两列（或让 `allowed()` 成为计划的唯一真值源）；"
+     "② 公开层清单**只以构建产物为准**（`public-jvs` 的 `git ls-files`），不得引用计划文件。"),
+    ("⭐ 2026-09-24「公开/私有拆库 + GitHub 上线」未登记进项目文档", "待规划",
+     "**实测**：全库 grep `jvs-causal-graph` / `public-jvs` / `公开层` / `shenhui-ui` 在 `README.md` / "
+     "`_handoff/HANDOFF.md` / `PROJECT-OVERVIEW.md` / `_handoff/` 下**命中 0**；"
+     "唯一交付文档 `_staging/SPLIT-DELIVERY-20260924.md`（含「十五、修订 9」）在**工作区之外、未入库**。"
+     "⇒ 接手方从 `README.md` → `HANDOFF.md` 这条路走完，**不会知道本项目已有一个公开镜像仓库、"
+     "也不知道公开层/私有层是怎么划的、构建与清洗脚本在哪**。"
+     "**本轮已补**：技能 `repo-public-private-split` 的项目级副本（含流程与 17 类坑），"
+     "但**不含本项目的具体参数**（公开层清单路径 / 构建脚本位置 / 清洗表内容）。"
+     "**待做**：在 `HANDOFF.md` 加一节或一段补充，写明「公开镜像存在 + 构建入口 + 清洗纪律 + 现状（已过期）」。"
+     "⚠️ 注意边界：公开层清单与构建脚本本身**在工作区之外**，登记时只写**位置与纪律**，不要把私有层路径清单搬进仓库。"),
+]
+
+# 2026-09-25 已闭合项（留档，勿再列入待办）
+CLOSED_20260925 = [
+    ("⭐ 仓内 `.workbuddy-ai/skills/` 第三处技能副本（陈旧、无人看管）",
+     "✅ **已处置**（2026-09-25，用户裁定 `2改为指针 README / 纳入 skills-gate 校验面`）。"
+     "**实测（改前）**：该目录下 4 份技能 —— `d10-review-overlay-closeout` / `diagnose-subagent-failure` / "
+     "`launch-dsh` / `windows-junction-project-migration`，全部已入库；`diff -r` 与用户级权威副本比对："
+     "**2 份不一致**（`d10-review-overlay-closeout` 第 53 行、`windows-junction-project-migration` 第 185 行）、2 份一致。"
+     "**根因**：`DEFINITION-OF-DONE.md` §8 只定义**两副本**（用户级 + `_handoff/skills/`），"
+     "`scripts/skills-gate.py` 也只校验这两处 ⇒ 第三处既不在纪律内、也不在机械校验内。"
+     "**处置**：① 4 份陈旧副本**删除**，改为 `.workbuddy-ai/skills/README.md` **指针 README**"
+     "（写明权威副本位置与「此处不得再放技能」）；② `skills-gate.py` 新增 **[6] 段**把第三处纳入校验面"
+     "（**fail-closed**：第三处缺目录 / 缺指针 README / 含任何 `*/SKILL.md` ⇒ 一律阻塞，可指名），"
+     "并配**负向夹具**自证能拒绝；③ `DEFINITION-OF-DONE.md` §8 同步该规则。"
+     "⭐ **同时更正一处不实断言**：2026-09-24 曾称该目录「属公开层」—— **错**，"
+     "它只在**拆分计划** `public-files.txt` 里被判为「干净」，而**构建白名单 `allowed()` 不含仓库根 `.workbuddy-ai/`**"
+     "⇒ 实测公开仓库该目录文件数 = **0**（计划 ≠ 公开层，已另立待办）。"),
 ]
 
 # 2026-09-19 已闭合项（留档，勿再列入待办）

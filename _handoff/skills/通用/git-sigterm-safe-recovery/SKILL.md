@@ -404,6 +404,7 @@ r_file = "$R" + i_name[2:]          # $I0000CX.json -> $R0000CX.json
 | `git switch main && git merge --no-ff <b>` | `git commit-tree` + `git update-ref` + `symbolic-ref` |
 | `git restore -- .` / `git checkout -- .` | 按 ≤3,000 文件/命令的 `--pathspec-from-file` 分块 |
 | 把长时 git 命令丢后台跑 | 把命令**本身切小**（前后台都一样会被 SIGTERM） |
+| 把**门禁 / 校验脚本**（由**多条短** git 命令组成的脚本）放**前台**跑 | **放后台**（`DEFINITION-OF-DONE.md` §3 已写明）。⭐ 2026-09-24 实测：`bash scripts/git-gate.sh`（约 2m08s）**前台 1/1 被终止**（rc=1 / `Signal: SIGTERM` / 输出为空），**后台 5/5 正常跑完**（均 RC=0）。⚠️ **与上一行的区别**：上一行针对**单条长时 git 命令**（切小是唯一解，前后台都不行）；本行针对**多条短命令组成的脚本**（脚本切不小 ⇒ 放后台）。⚠️ **终止机制未确证** —— 无法区分「前台命令超时被终止」与「环境对 git 发 SIGTERM」⇒ **只登记观察，不宣称归因**；后台跑亦**不得**据此宣称安全（见正文「第 4 步」的分块纪律） |
 | `git reset --hard` 救场 | 先查对象库，再 `git restore` |
 | `wmic` | `tasklist \| grep -i "git\.exe"`（+3–5 次重试） |
 

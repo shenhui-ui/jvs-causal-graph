@@ -304,11 +304,54 @@ def proj_dir_of(proj_root, name):
     return None
 
 
+# ---- 第三处（宿主约定路径，**不是**权威副本）：仓内 `.workbuddy-ai/skills/` ----
+# ⭐ 2026-09-25 用户裁定：「改为指针 README + 纳入本脚本校验面」。
+#
+# 为什么要有这一段：该目录是**宿主的项目级技能约定路径**，与 `_handoff/skills/`（本仓库的
+# 权威项目级副本）**不是同一套**。2026-09-25 实测它有 4 份技能，其中 **2 份与权威副本不一致**
+# ⇒ 静默过期的**第二真值源**。`DEFINITION-OF-DONE.md` §8 只定义两副本，故此前它「既不在纪律内、
+# 也不在机械校验内」。
+#
+# 判据（fail-closed，三条缺一不可）：
+#   ① 该目录**必须存在**；
+#   ② 必须存在**指针 README**，且**自述权威副本位置**（含关键词 `POINTER_MARK`）；
+#   ③ **不得含任何 `*/SKILL.md`** —— 一旦出现即说明又有人往这里塞技能。
+# ⚠️ ③ 是**防回归**判据（改后当前状态必过）；为证明它**能拒绝**而非恒真，
+#    `--self-test` 里配了「往第三处塞一个 `SKILL.md`」的负向夹具。
+THIRD_REL = os.path.join(".workbuddy-ai", "skills")
+POINTER_MARK = "权威副本"
+
+
+def third_root_default():
+    """默认第三处 = 本脚本所在仓库根下的 `.workbuddy-ai/skills`。"""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        THIRD_REL)
+
+
+def third_offenders(root):
+    """第三处里出现的 `*/SKILL.md` 子目录名（排序）。"""
+    out = []
+    if not os.path.isdir(root):
+        return out
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return out
+    for name in names:
+        d = os.path.join(root, name)
+        if os.path.isdir(d) and os.path.isfile(os.path.join(d, "SKILL.md")):
+            out.append(name)
+    return out
+
+
 # ---------------------------------------------------------------- 主检查
 
-def run_checks(user_root, proj_root, quiet=False, user_root_explicit=False):
-    """四段判据合一。返回 Report。"""
+def run_checks(user_root, proj_root, quiet=False, user_root_explicit=False,
+               third_root=None):
+    """四段判据合一（2026-09-25 起为五段，含 [6] 第三处）。返回 Report。"""
     r = Report()
+    if third_root is None:
+        third_root = third_root_default()
     skills = list_skills(user_root)
     proj_names = []
     for sub in PROJ_SUBDIRS:
@@ -528,6 +571,30 @@ def run_checks(user_root, proj_root, quiet=False, user_root_explicit=False):
         r.note("判据：长度 ≤ %d / 含触发式表述 / 不含流程动词黑名单；"
                "**负向触发用例依赖子代理设施 ⇒ 本轮不做**" % DESC_MAX)
 
+    # ---------- [6] 第三处（仓内 `.workbuddy-ai/skills/`）—— 2026-09-25 新增 ----------
+    r.section("[6] 第三处技能副本（仓内 `.workbuddy-ai/skills/`，只允许指针 README）")
+    if not os.path.isdir(third_root):
+        r.fail("第三处目录不存在: %s" % third_root)
+        r.detail("它是宿主的项目级技能约定路径；本仓库用它放**指针 README**。"
+                 "缺失 ⇒ 判阻塞（fail-closed，与 [0] 段同构）。")
+    else:
+        r.ok("第三处目录在位")
+        ptr = os.path.join(third_root, "README.md")
+        txt = read_text(ptr)
+        if txt is None:
+            r.fail("第三处缺指针 README: %s" % ptr)
+        elif POINTER_MARK not in txt:
+            r.fail("第三处 README 未自述权威副本位置（缺关键词「%s」）" % POINTER_MARK)
+        else:
+            r.ok("第三处指针 README 在位且自述权威位置")
+        off = third_offenders(third_root)
+        if off:
+            r.fail("第三处出现技能副本（此处不得放技能）: %s" % ", ".join(off))
+            r.detail("权威副本只有两处 —— 用户级 `~/.workbuddy-ai/skills/` 与项目级 "
+                     "`_handoff/skills/`（见 `_handoff/DEFINITION-OF-DONE.md` §8）。"
+                     "第三处一旦放技能即形成**第二真值源**（2026-09-25 实测曾有 4 份、其中 2 份已过期）。")
+        else:
+            r.ok("第三处无技能副本（0 个 `*/SKILL.md`）")
 
     return r
 
@@ -605,10 +672,29 @@ def self_test(quiet=False):
                      "### `pit-skill`\n\n含**两个**必踩的坑：\n\n"
                      "## 维护\n")
 
+        # ---- 第三处（[6] 段）夹具：1 个「好」+ 3 个「坏」 ----
+        # 好：目录在 + 指针 README 自述权威位置 + 无技能副本
+        third_good = os.path.join(tmp, "third-good")
+        os.makedirs(third_good, exist_ok=True)
+        with open(os.path.join(third_good, "README.md"), "w", encoding="utf-8") as fh:
+            fh.write("# 指针\n\n权威副本在别处，此处不得放技能。\n")
+        # 坏 A：塞了一个技能副本（正是 2026-09-25 处置掉的形态）
+        third_skill = os.path.join(tmp, "third-skill")
+        os.makedirs(third_skill, exist_ok=True)
+        with open(os.path.join(third_skill, "README.md"), "w", encoding="utf-8") as fh:
+            fh.write("# 指针\n\n权威副本在别处。\n")
+        _mk(third_skill, "stale-copy", FM_GOOD % "stale-copy")
+        # 坏 B：指针 README 缺关键词
+        third_nomark = os.path.join(tmp, "third-nomark")
+        os.makedirs(third_nomark, exist_ok=True)
+        with open(os.path.join(third_nomark, "README.md"), "w", encoding="utf-8") as fh:
+            fh.write("# 这里放技能\n\n随便写点。\n")
+        # 坏 C：目录缺失（下面用不存在的路径直接构造）
+
         # 夹具轮的**详细输出被吞掉**（只留断言行），否则自证报告被 4 份子报告淹没
         sink = io.StringIO()
         with contextlib.redirect_stdout(sink):
-            rep = run_checks(ur, pr, quiet=True)
+            rep = run_checks(ur, pr, quiet=True, third_root=third_good)
 
         def fails_for(name):
             return [m for m in rep.fails if name in m]
@@ -679,6 +765,39 @@ def self_test(quiet=False):
             r.ok("反假绿: 用户级根存在但无技能 ⇒ 判 %d 项阻塞" % rep4.failed)
         else:
             r.fail("反假绿失败: 空技能目录被当作全过")
+
+        # ---- [6] 第三处：判据必须**能拒绝**（四条，含 3 个负向）----
+        if any("第三处" in m for m in rep.fails):
+            r.fail("第三处（好夹具）→ 误报：%s" % " | ".join(
+                m for m in rep.fails if "第三处" in m)[:90])
+        else:
+            r.ok("第三处（好夹具）→ 未误报（指针 README 在位且无技能副本）")
+        # 「判据确实跑了」
+        if any("第三处无技能副本" in m for m in rep.oks):
+            r.ok("[6] 第三处「无技能副本」判据**确实被跑到**")
+        else:
+            r.fail("[6] 第三处「无技能副本」判据静默跳过（等于没跑）")
+
+        def third_fails(root):
+            with contextlib.redirect_stdout(io.StringIO()):
+                rr = run_checks(ur, pr, quiet=True, third_root=root)
+            return [m for m in rr.fails if "第三处" in m]
+
+        got = third_fails(third_skill)
+        if got and "技能副本" in " | ".join(got):
+            r.ok("第三处（塞了技能副本）→ 已指名报出：%s" % got[0][:70])
+        else:
+            r.fail("第三处（塞了技能副本）→ 漏报（防回归判据是恒真的！）：%s" % (got or "无失败项"))
+        got = third_fails(third_nomark)
+        if got and "未自述" in " | ".join(got):
+            r.ok("第三处（README 缺关键词）→ 已指名报出：%s" % got[0][:70])
+        else:
+            r.fail("第三处（README 缺关键词）→ 漏报：%s" % (got or "无失败项"))
+        got = third_fails(os.path.join(tmp, "third-missing"))
+        if got and "不存在" in " | ".join(got):
+            r.ok("第三处（目录缺失）→ 已指名报出：%s" % got[0][:70])
+        else:
+            r.fail("第三处（目录缺失）→ 漏报（fail-closed 失效）：%s" % (got or "无失败项"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return r
@@ -692,6 +811,8 @@ def main(argv=None):
                     help="用户级技能根（默认 ~/.workbuddy-ai/skills）")
     ap.add_argument("--proj-root", default=None,
                     help="项目级技能根（默认 <仓库>/_handoff/skills）")
+    ap.add_argument("--third-root", default=None,
+                    help="第三处根（默认 <仓库>/.workbuddy-ai/skills）；只允许指针 README")
     ap.add_argument("--quiet", action="store_true", help="少打明细（失败项照打）")
     ap.add_argument("--self-test", action="store_true",
                     help="跑负向夹具自证（不检查真仓库）")
@@ -710,6 +831,7 @@ def main(argv=None):
 
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     proj_root = a.proj_root or os.path.join(repo, "_handoff", "skills")
+    third_root = a.third_root or os.path.join(repo, THIRD_REL)
     explicit = a.user_root is not None
     user_root = (a.user_root
                  or os.environ.get("JVS_SKILLS_USER_ROOT")
@@ -719,9 +841,10 @@ def main(argv=None):
     print(" 技能层机械校验  (%s)" % datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
     print(" 用户级: %s" % user_root)
     print(" 项目级: %s" % proj_root)
+    print(" 第三处: %s" % third_root)
     print("=" * 46)
     rep = run_checks(user_root, proj_root, quiet=a.quiet,
-                     user_root_explicit=explicit)
+                     user_root_explicit=explicit, third_root=third_root)
     return _finish(rep, "技能层")
 
 

@@ -150,6 +150,15 @@ git check-ignore -v <path>              # 查是否被忽略，并打印规则�
 
 ⇒ 改完必须 `cp` 同步，并 `diff -r` 验字节一致（**无输出**）。否则项目级副本**静默过期**。
 
+### ⚠️ 第三处路径（`.workbuddy-ai/skills/`）**不是副本，是指针**（2026-09-25 新增）
+
+`.workbuddy-ai/skills/` 是**宿主的项目级技能约定路径**，与上表的项目级副本**不是同一套**。
+历史上这里放过 4 份技能，实测 **2 份已与权威副本不一致** ⇒ 形成**第二真值源**。
+
+⇒ 纪律：**该目录只允许存在一份指针 `README.md`，不得放任何 `*/SKILL.md`**。
+由 `scripts/skills-gate.py` 的 **`[6]` 段**机械守卫（fail-closed：缺目录 / 缺指针 README /
+出现技能副本 ⇒ 一律阻塞），负向自证见 `python scripts/skills-gate.py --self-test`。
+
 ## 9. 留痕（所有任务必做）
 
 - 追加项目记忆 `C:\Users\<user>\Desktop\JVS\.workbuddy-ai\memory\YYYY-MM-DD.md`
