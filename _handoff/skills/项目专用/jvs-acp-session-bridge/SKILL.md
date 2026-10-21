@@ -23,8 +23,13 @@ agent_created: true
 > 实测：`--version` ⇒ **`0.2.0-rc.2`**；`--profile acp --dump-config` ⇒ **正常输出**
 > （`@deepseek-ai/dsh-base` + `dsh-acp-app` patch 生效）⇒ **ACP profile 可加载**。
 >
-> ⚠️ **「可加载」≠「端到端可用」**：`session/new` / `prompt` / `list` / `resume` **尚未重跑**
-> ⇒ 本技能正文的实测结论仍是 **2026-09-19** 的，**用前须先复跑一次**（成本：1 次 session/new，不调 LLM）。
+> ✅ **2026-10-21 14:3x 端到端已验证（不调 LLM）**：`initialize` ⇒ `agentInfo=deepseek-harness-acp 0.0.1`、
+> 能力 `close/list/resume`；`session/new` ⇒ `sessionId=53e92a04-9b44-4b6b-a659-4d1c8069e644`；
+> `session/list` ⇒ **48 条**（含该新会话）。**成品桥已适配桌面端**：`find_dsh()` 返回 `(kind, path)`，
+> 桌面端分支加 `--expose-internals` + `ELECTRON_RUN_AS_NODE=1`；实测 `probe` / `list` / `new --dry-run` **三条全通**。
+> ⚠️ **坑**：桌面端 `cli.js` 在 `app.asar` 内，`os.path.exists` **恒为 False** ⇒ 只能探测 exe，
+> cli.js 按约定拼路径（用 exists 判否会永远探测不到）。
+> ⚠️ **仍未跑**：`session/prompt`（会调 LLM，未授权）。
 > ⚠️ **2026-10-07「已完全卸载」的判据口径错**：那批（`dsh-install-*` 0 命中 / 全局 npm 无该包 / 3080 无监听）
 > 只证明 **npm 安装路径**为空，**证明不了「本机无 DSH」** —— 桌面端 9-28 就已装。
 > 教训：**「某条安装路径为空」≠「该软件不存在」**（同族：`launch-dsh` 被这条断言带偏 2 周）。

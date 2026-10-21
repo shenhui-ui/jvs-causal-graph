@@ -50,6 +50,14 @@ NODE_GLOBS = [
 DSH_GLOBS = [
     r"C:\Users\<user>\.workbuddy-ai\binaries\node\dsh-install-*\node_modules\@deepseek-ai\dsh\lib\bin.js",
 ]
+# 桌面端（2026-10-21 新增）：Electron 打包，CLI 是 exe 以 node 模式跑 asar 内的 cli.js。
+# ⚠️ cli.js 在 app.asar 内，os.path.exists 恒为 False ⇒ 只探测 exe，cli.js 按约定拼接。
+DESKTOP_EXE_GLOBS = [
+    os.path.join(os.environ.get("LOCALAPPDATA", r"C:\Users\<user>\AppData\Local"),
+                 "Programs", "DeepSeek Harness*", "DeepSeek Harness.exe"),
+]
+DESKTOP_CLI_REL = os.path.join("resources", "app.asar", "dsh", "node_modules",
+                               "@deepseek-ai", "dsh-desktop-host", "lib", "cli.js")
 DSH_HOME_DEFAULT = r"C:\Users\<user>\.dsh"
 
 # ---- PATHEXT 修复（2026-09-19 实测根因，见 README-acp-bridge.md「环境修复」节）
@@ -108,10 +116,19 @@ def find_node():
 
 
 def find_dsh():
+    """返回 (kind, path)。kind ∈ {"node","desktop"}。
+
+    优先旧 npm 安装路径（历史行为不变），其次桌面端（2026-10-21 新增）。
+    桌面端只验证 exe；cli.js 在 app.asar 内，exists 恒 False，故不参与判定。
+    """
     d = _pick_latest(DSH_GLOBS)
-    if not d:
-        raise EnvError("找不到 dsh 入口(已查 %s);用 --dsh 显式指定" % DSH_GLOBS)
-    return d
+    if d:
+        return "node", d
+    exe = _pick_latest(DESKTOP_EXE_GLOBS)
+    if exe:
+        return "desktop", exe
+    raise EnvError("找不到 dsh 入口(已查 %s 与桌面端 %s);用 --dsh 显式指定"
+                   % (DSH_GLOBS, DESKTOP_EXE_GLOBS))
 
 
 class EnvError(RuntimeError):
@@ -166,9 +183,10 @@ def gate_check(text, scan_mod, names_json=""):
 class AcpClient:
     """极简 ACP v1 客户端(JSON-RPC 2.0 over stdin/stdout,换行分帧)。"""
 
-    def __init__(self, node, dsh, home=None, timeout=300):
+    def __init__(self, node, dsh, home=None, timeout=300, kind="node"):
         self.node = node
         self.dsh = dsh
+        self.kind = kind          # "node" = 旧 npm 入口；"desktop" = Electron exe + asar cli.js
         self.home = home or DSH_HOME_DEFAULT
         self.timeout = timeout
         self.child = None
@@ -183,10 +201,18 @@ class AcpClient:
 
     # ---- 生命周期
     def start(self):
+        env = child_env()
+        if self.kind == "desktop":
+            # Electron exe 以 node 模式跑 asar 内的 cli.js；--expose-internals 是桌面端 CLI 的既有参数
+            cli = os.path.join(os.path.dirname(self.dsh), DESKTOP_CLI_REL)
+            argv = [self.dsh, "--expose-internals", cli, "--profile", "acp"]
+            env["ELECTRON_RUN_AS_NODE"] = "1"
+        else:
+            argv = [self.node, self.dsh, "--profile", "acp"]
         self.child = subprocess.Popen(
-            [self.node, self.dsh, "--profile", "acp"],
+            argv,
             cwd=self.home,
-            env=child_env(),
+            env=env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -357,8 +383,12 @@ def build_prompt(material_paths, note="", extra="", max_bytes=200000):
 # ---------------------------------------------------------------- 子命令
 def _boot(args):
     node = args.node or find_node()
-    dsh = args.dsh or find_dsh()
-    return AcpClient(node, dsh, home=args.home, timeout=args.timeout)
+    if args.dsh:
+        kind = "desktop" if args.dsh.lower().endswith(".exe") else "node"
+        dsh = args.dsh
+    else:
+        kind, dsh = find_dsh()
+    return AcpClient(node, dsh, home=args.home, timeout=args.timeout, kind=kind)
 
 
 def _emit(obj, as_json, text_fn=None):
