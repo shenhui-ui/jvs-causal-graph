@@ -1,0 +1,95 @@
+# fallback.yaml —— why() 降级判据的**单一真值源**（任务 M1-11）
+#
+# 立项书 §4 原文：
+#   M1-11 | why() 兜底（必做；阈值：无链=无因果路径；低置信=最优路径边置信 <0.5；
+#           弱关联=仅 weak 边且 ≥2 跳；W1 锁定 fallback.yaml）| 验收：三类样例各 ≥3
+#
+# ⚠️ 状态 = locked（2026-09-28）
+#    四项待裁定已由项目方裁定完毕，见文件末尾 rulings。**本文件自此为判据真值源**；
+#    再改必须走新的裁定 + 修订本文的 version / locked_at。
+#
+# 读取方：tools/causal/why_fallback.py（阈值一律从此处读，不得再硬编码第二份）
+
+version: 2
+locked_at: "2026-09-28"
+status: locked
+source: "M1-立项书-v0.6.md §4 任务表 M1-11 + 项目方 2026-09-28 裁定（见 rulings）"
+
+# 判定优先级：按此顺序取**第一个命中**的类；未命中任何一类 = none（不降级）
+# ⚠️ 注意：`all_matched` 用**规范顺序**输出（与 precedence 无关），只有胜出者按此表取。
+precedence: [no_chain, low_confidence, weak_only]
+
+classes:
+
+  # 类 1：无链 —— 无因果路径
+  no_chain:
+    enabled: true
+    definition: "无因果路径（why() 遍历输出 0 条边）"
+    source: "立项书 §4 逐字"
+    statement: "未在因果图谱中找到与起始事件相关的因果路径（遍历 0 条边）。以下回答不含因果推断，仅基于宿主检索结果。"
+
+  # 类 2：低置信 —— 最优路径边置信低于阈值
+  low_confidence:
+    enabled: true
+    threshold: 0.6
+    # metric 声明本实现把「最优路径边置信」读作哪个测度（max_confidence | min_confidence）。
+    # ⚠️ 裁定 Q-1 定：**max_confidence**。二者是不同口径，结论可能相反（见 rulings Q-1）。
+    metric: max_confidence
+    definition: "最优路径边置信 < threshold"
+    source: "threshold=0.6 取自实现 CONF_GATE（裁定 Q-1 维持）；⚠️ 立项书 §4 写 <0.5 ⇒ 见 rulings Q-1 的分工声明"
+    statement: "找到 {n_edges} 条因果线索，但其最优路径边置信 {max_confidence} 低于阈值 {threshold}。以下结论仅作参考，不作为因果判定。"
+    # 置信度**不可解析**时走单独模板（否则会渲染出「置信 None 低于阈值 0.6」的措辞瑕疵）
+    statement_unknown: "找到 {n_edges} 条因果线索，但其置信度无法解析（不可信）⇒ 按低置信处理。以下结论仅作参考，不作为因果判定。"
+
+  # 类 3：弱关联 —— 仅 weak 边且跳数达标
+  weak_only:
+    enabled: true
+    strengths: [weak, pending]
+    # ⚠️ 口径偏离登记（2026-09-28 审核 P3-1）：立项书 §4 原文是「**仅 weak 边**」，
+    #    本实现把 `pending` 一并计入「弱关联」。依据：`causal_graph.py` 模块文档与
+    #    `why()` 的注释明文把二者并列为「**一跳线索**」用途（「低置信/weak/pending 边
+    #    可作为当前节点的一跳线索，但不会将目标节点继续入队」）⇒ 分类口径沿用同一并列表述。
+    #    ⚠️ 生产库现测 `pending` = 0 条 ⇒ **当前无实际影响**；但该偏离须随 D 表登记（见 D-5）。
+    strengths_basis: "立项书仅写 weak；pending 依 causal_graph 模块文档「weak/pending 同为一跳线索」并列计入 ⇒ 已登记为 D-5"
+    min_hops: 2
+    definition: "仅 weak 边且 ≥ min_hops 跳"
+    source: "立项书 §4 逐字 + 裁定 Q-2（改实现让 weak 可扩展）"
+    # ⚠️ 该类**依赖环境变量**：默认关时 weak 边不可扩展 ⇒ 该类在 why() 中算法不可达。
+    requires_env: "JVS_WEAK_EXPAND=1"
+    statement: "仅找到弱关联线索（{hops} 跳、{n_edges} 条边，全部为 weak/pending）。证据强度不足以构成因果链。"
+
+# 验收口径（**改判**，裁定 Q-4）
+# ⚠️ 台账一律用「改判」，不得用「豁免」；整体豁免 = 否。
+acceptance:
+  revised: true
+  revised_at: "2026-09-28"
+  original: "三类样例各 ≥3（立项书 §4）"
+  criteria:
+    no_chain: "≥3（真实图谱）"
+    weak_only: "≥3（真实图谱，需 JVS_WEAK_EXPAND=1）或 空集证明"
+    low_confidence: "空集证明 + fixture 样例 ≥3"
+  note: "fixture 样例必须标 source: fixture 且 counts_as_real_graph_hit: false，不得计入真实图谱命中统计"
+
+# 已裁定项（2026-09-28，项目方裁定；原始提问见 _handoff/NEXT-裁定请求-M1-11-20260928.md）
+# ⚠️ 本清单是**决策留档**，不是待办。完整记录见 docs/host_memory_dump/M1-11-待裁定项决策记录-20260928.md
+rulings:
+  - id: Q-1
+    question: "「低置信」阈值取 0.5 还是 0.6？「最优路径边置信」按 max 还是 min 读？"
+    decision: "维持 0.6 + max_confidence"
+    consequence: "立项书 §4 的 <0.5 与实现的 0.6 **不是同一个量**：0.5 是立项书原文、0.6 是现行分类阈值；「可否继续多跳」的扩展闸门同样是 0.6。二者分工并存，不得当同一个数使用。"
+    follow_up: "等价于修订已签字的立项书 §4 条文 ⇒ 须在立项书修订记录与 Gate 3 材料中留痕"
+  - id: Q-2
+    question: "「弱关联 = 仅 weak 边且 ≥2 跳」的定义是否修订？"
+    decision: "改实现：让 weak 边可继续多跳（opt-in，JVS_WEAK_EXPAND，默认关）"
+    consequence: "实测该类可达锚点由 0 → 8（全量 1,655 事件扫描）；默认关时遍历输出与改动前逐字段 0 差异"
+    follow_up: "与 v2.1 铁律「weak 不参与多跳」冲突 ⇒ 须书面记录；把生产默认改为「开」属另一项口径变更，须评审会批准 + 全量重评"
+  - id: Q-3
+    question: "三类样例在哪张图谱上构造？"
+    decision: "生产图谱 d10-graph-refill.db"
+    consequence: "该图 conf<=0.6 的边 = 0 条（最小 conf = 0.61）⇒「低置信」类客观为空集，无真实样例可构造"
+    follow_up: "该类走 Q-4 的「空集证明 + fixture 样例」"
+  - id: Q-4
+    question: "是否豁免验收「三类样例各 ≥3」？"
+    decision: "否 —— 改为「改判」（见 acceptance.criteria）"
+    consequence: "无链 ≥3（已超额）｜弱关联 ≥3 或空集证明｜低置信 空集证明 + fixture ≥3"
+    follow_up: "台账用「改判」不用「豁免」；整体豁免 = 否"

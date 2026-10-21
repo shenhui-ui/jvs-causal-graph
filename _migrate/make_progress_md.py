@@ -6,15 +6,16 @@ JVS = r"C:\Users\<user>\Desktop\JVS"
 IDX = os.path.join(JVS, "_index")
 TODAY = datetime.date.today().isoformat()
 sys.path.insert(0, os.path.join(JVS, "_migrate"))
-from status_map import ROADMAP, PENDING, get, rollup  # noqa
+from status_map import (ROADMAP, PENDING, get, rollup,  # noqa
+                        BADGE, STATUS_BADGE, STATUS_ORDER, check_status_keys)
 import status_map as _sm  # noqa
 
 # ⚠️ 自动发现所有 CLOSED_* 留档组，勿再硬编码单个变量 ——
 # 定义了却不渲染 = 收口项静默消失（本项目已踩过）。
 CLOSED_GROUPS = [(k, getattr(_sm, k)) for k in sorted(dir(_sm))
                  if k.startswith("CLOSED_") and isinstance(getattr(_sm, k), list)]
-
-BADGE = {"已开发": "✅ 已开发", "开发中": "🔧 开发中", "待开发": "⏳ 待开发", "待规划": "🗓️ 待规划"}
+# ⚠️ BADGE 与图例文字**一律从 status_map 取** —— 本文件曾自存一份 BADGE 副本，
+#    与 make_index_md.py 的同名副本构成「多真值源」缺陷，2026-09-30 收敛。
 
 
 def load():
@@ -32,7 +33,7 @@ def write_progress(by):
     A("")
     A("**项目**：M1「跨会话因果问答」MVP —— 时序-因果图谱 + 跨会话因果问答")
     A("")
-    A("图例：✅ 已开发（产物已验证/闭环）｜🔧 开发中（未闭环）｜⏳ 待开发（有设计未产出）｜🗓️ 待规划（未立项）")
+    A("图例：" + "｜".join("%s「%s」" % (_b, _d) for _k, _b, _d in STATUS_BADGE))
     A("")
     A("---")
     A("")
@@ -43,7 +44,7 @@ def write_progress(by):
     A("| 因果准确率 | ≥60%（18/30） | **21/30 = 70.00%** | ✅ 达标 |")
     A("| 编造边 | 0 条 | **0/67** | ✅ 达标 |")
     A("| 端到端合格率 | ≥60% | **20/29 = 68.97%**（全量分母 20/30 = 66.67%） | ✅ 达标（2026-09-28 补评） |")
-    A("| 独立留出集（D10） | — | `causal_accuracy` **0.8000**（n=10） | ✅ 报告已出 |")
+    A("| 独立留出集（D10） | — | `causal_accuracy` **0.8000**（n=10）⚠️ **已因 D-③ 作废、已重跑** | ✅ 报告已出（**旧值不得用于 7,116 图谱**；重跑产物 `_staging/out_d10_gen_c/`） |")
     A("")
     A("> ⚠️ 留出集合格率**单列，不得与 21/30、22/30 混算**；`cause_hit` 合法分母是 **3** 不是 6 ⇒ **3/3 = 1.0000**。")
     A("> ⚠️ `causal_accuracy` **0.8000 是本题型构成下的理论上限**（「证据定位」2 题不问原因，`cause` 恒 false），")
@@ -134,8 +135,130 @@ _JUNC_SRC = _OLD_ROOT + os.sep.join(["outputs", "m1-10-d10-event-extract-full-20
 _JUNC_DST = _NEW_ROOT + os.sep.join(
     ["02-m1-evaluation", "outputs", "m1-10-d10-event-extract-full-20260908"])
 
+# ── 旧根前缀计数（口径 A）──────────────────────────────────────────────
+# ⚠️ 判据串必须是**裸串**（无尾分隔符），与 `_staging/probe/junction_scan.py` 的 chr(92)
+#    构造逐字等价；「带尾分隔符」只是它的**子口径**（2026-09-29 现测 289 ⊂ 318，差 29）。
+# ⚠️ 源码里**不得**出现裸串字面量 —— **注释也不行**（注释不做转义处理，会逐字进文件）。
+#    否则本生成器自身会进入命中集，把计数**变成 +1 的自指**。
+#    实测基线（2026-09-29）：改造前 `_migrate/make_progress_md.py` **不在**命中集；
+#    改造后必须**仍不在** —— 这是本次改动必须自证的项（红线 10：能拒绝才算校验）。
+#    故此处用 `"C:" + "\\" + "\\".join([...])` 拼装，源码字节里不含裸串。
+_OLD_ROOT_BS1 = "C:" + "\\" + "\\".join(["Users", "<user>", "host-workspace"])
+# 渲染**顺序与标签一律沿用原硬编码行**（勿改：便于与历史载数逐组对照）
+#   元素 = (顶层目录 key, 显示标签)；`(根)` 是「仓库根下、不含斜杠」的伪 key。
+_OLD_ROOT_GROUPS = [("03-d10-workspace", "03"), ("01-host-product", "01"),
+                    ("02-m1-evaluation", "02"), ("_archive", "`_archive`"),
+                    ("(根)", "根"), ("_migrate", "`_migrate`"),
+                    (".workbuddy-ai", "`.workbuddy-ai`"), ("_handoff", "`_handoff`")]
+
+
+def old_root_facts():
+    """现算「库内含旧根前缀的被跟踪文件」数（口径 A，读 HEAD 树）。
+
+    为什么现算：该数原为硬编码 `313 / 21,208` + 8 组明细，而本生成器的产物
+    `_handoff/PENDING.md` 正是被统计对象之一 ⇒ 数字**永不自动更新**
+    （红线 5「静默过期」第 20 处；2026-09-29 F 项复核后改为现算）。
+
+    口径（红线 30：同一个数字可以是「多口径 × 多时点」）：
+      · 判据 = **裸串**（无尾分隔符），**读 HEAD 树**，不读工作区（红线 29：`git grep <rev>` 首选）。
+      · ⚠️ **含本报告文件自身** —— `_handoff/PENDING.md` 因渲染了该字面量而被计入。
+        这是**判据的必然结果**：独立复现者按同一判据跑，应得**同一数字**；
+        **不得**为「数字好看」而静默减 1（那会立刻制造红线 30 式的「不符」）。
+      · ⚠️ **口径锚 ≠ 处置面全集** —— 单正斜杠形态另有 213 件、双反斜杠 3,555 件
+        （与四反斜杠交叠 4 件 ⇒ 相加 ≠ 并集）；处置时须按**所有形态的并集**评估，
+        本口径只作**对外引用锚**。
+      · ⚠️ 与 `_handoff/NEXT-裁定请求-20260928.md` 的 524 / 21,283 是**不同口径**
+        （单分隔符正则，**无 `+`**）⇒ 两者**不互斥**，各自在其口径下自洽。
+
+    返回 `(命中数, tracked 数, 8 组明细串)`；git 不可用 / 超时 / 非零退出 ⇒ 三项全 `?`
+    —— 宁可显示问号，也不写一个会过期的值（同 `gate_steps()` 的既有约定）。
+    """
+    import subprocess, tempfile
+
+    def g(*args):
+        return subprocess.run(["git"] + list(args), cwd=JVS, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", timeout=180)
+
+    try:
+        ls = g("ls-tree", "-r", "--name-only", "HEAD")
+        if ls.returncode != 0:
+            return "?", "?", "?"
+        tracked = len([x for x in ls.stdout.splitlines() if x])
+
+        fd, pat = tempfile.mkstemp(suffix=".txt")
+        os.close(fd)
+        try:
+            with io.open(pat, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(_OLD_ROOT_BS1)      # 无尾换行：否则空模式会匹配全部文件
+            gr = g("grep", "-F", "-l", "-f", pat, "HEAD")
+        finally:
+            try:
+                os.unlink(pat)
+            except OSError:
+                pass
+        if gr.returncode not in (0, 1):      # 0=有命中，1=无命中，其余=出错
+            return "?", "?", "?"
+
+        hits = [l[5:] for l in gr.stdout.splitlines() if l.startswith("HEAD:")]
+        cnt = collections.Counter()
+        for p in hits:
+            q = p.replace("\\", "/")
+            cnt["(根)" if "/" not in q else q.split("/")[0]] += 1
+        # 千分位与标签风格**对齐原硬编码行**（`21,288` / `03:194`），便于逐组对照
+        detail = " / ".join("%s:%s" % (lab, format(cnt.get(k, 0), ","))
+                            for k, lab in _OLD_ROOT_GROUPS)
+        return format(len(hits), ","), format(tracked, ","), detail
+    except Exception:
+        return "?", "?", "?"
+
+
+LEDGER = os.path.join(JVS, "03-d10-workspace", "2026-09-08-20-30-19", "outputs",
+                      "full-review-full-20260909", "acceptance-ledger.json")
+
+
+def open_findings_facts():
+    """现算 §二「复核机械未结项」的全部数字（红线 5：硬编码计数会静默过期）。
+
+    为什么现算：`123`（连同 severity/conclusion 描述）原为**硬编码字面量**，
+    而本生成器的产物 `_handoff/PENDING.md` 正是被引用对象 ⇒ 台账若变，数字**永不自动更新**
+    （2026-09-29 A2 报告反解 + 独立第二实现复现后改为现算）。
+
+    口径（**逐字**，A2 报告 §1）：
+      123 = { f ∈ open_findings : f.binds_current_version is True
+                                ∧ f.superseded_by_newer_verification is False
+                                ∧ f.withdrawn_by_adjudication is False }
+    ⚠️ 台账自报 4 个计数**互不相等**（125 + 99 + 2 = 226 ≠ 289）⇒ 必须按口径现算，
+       **不得**引用 `open_findings_effective_open` 等自报字段（名称与实际不符）。
+    ⚠️ `severity` / `blocking` 在 `finding` 子对象内（台账顶层这两个键**不存在**）。
+    ⚠️ 「severity 全为 low/minor/info」不精确（另含 `informational` / `none`）；
+       「blocking 全为 False」**不成立**（实测 False 118 + `None` 5）⇒ 只能断言「无 True」。
+
+    返回 `(条数串, severity 分布串, conclusion 分布串, blocking 说明串)`；
+    台账缺失 / 不可解析 ⇒ 四项全 `?`（宁可显示问号，也不写一个会过期的值）。
+    """
+    try:
+        d = json.load(io.open(LEDGER, encoding="utf-8"))
+        of = d["open_findings"]
+    except Exception:
+        return "?", "?", "?", "?"
+    sub = [x for x in of
+           if x.get("binds_current_version") is True
+           and x.get("superseded_by_newer_verification") is False
+           and x.get("withdrawn_by_adjudication") is False]
+    sev = collections.Counter((x.get("finding") or {}).get("severity") for x in sub)
+    con = collections.Counter(x.get("conclusion") for x in sub)
+    blk = collections.Counter(str((x.get("finding") or {}).get("blocking")) for x in sub)
+    sev_s = " / ".join("%s %s" % (k, sev[k]) for k in
+                       ("low", "minor", "info", "informational", "none") if sev.get(k))
+    con_s = "、".join("%s 条 `%s`" % (con[k], k)
+                     for k in sorted(con, key=lambda x: -con[x]))
+    blk_s = "blocking 无 `True`（%s）" % " / ".join(
+        "%s %s" % (k, blk[k]) for k in ("False", "None") if blk.get(k))
+    return str(len(sub)), sev_s, con_s, blk_s
+
 
 def write_pending(by):
+    n_old, n_tracked, g_old = old_root_facts()   # 现算（红线 5：硬编码计数会静默过期）
     out = []
     A = out.append
     A("# 待办清单 —— JVS / M1")
@@ -168,8 +291,10 @@ def write_pending(by):
       "**文本至今未修订**、`WEAK-POSITION-RULING` 仅「建议」⇒ **若严口径仍生效则 `A1207`/`A4830` 应剔**；"
       "另查出**判型映射表非穷尽**（v2.1 自身示例 3 即表外的 `trigger ∧ strong`）⇒ 表外边达 **1,243 条（14.7%）**。"
       "见 `_handoff/D4-ILLEGAL-COMBO-RESIDUAL-20260923.md`（含第二方复核 **14/14 一致**）；"
-      "② 口径裁定 A（G14 那 9 条 **3×3 完全二分图**「全剔 or 改型保留」）/ B（`conf≤0.6` 用 `≤` 还是 `<`，"
-      "涉及 `conf == 0.6` 的边 —— **现测 1,298** 条）。"
+      "② ~~口径裁定 A（G14 那 9 条 **3×3 完全二分图**「全剔 or 改型保留」）/ B（`conf≤0.6` 用 `≤` 还是 `<`，"
+      "涉及 `conf == 0.6` 的边 —— **现测 1,298** 条）~~ ⇒ ✅ **已裁（2026-09-23 用户三问）**："
+      "**Q1 = C 剔除**（真源层剔除 + 官方入口重建，D-③ 已落库）、**Q2 = 维持 `≤`**（无需额外动作）。"
+      "⚠️ `1,298` / `1,330` **均为历史时点值**；**当前图谱 `conf == 0.6` = 0**（D-③ 已剔净）⇒ 引用前现测。"
       "⭐ **D-② 已于 2026-09-23 裁定闭合**：`A5530`（收口后 tier R **仅剩 1 条**）取「**接受闸门口径**」"
       "—— **不人工覆盖 `confidence`**，重建时由 D-① 闸门自动改标 `pending`；**零写入图谱**。见 "
       "`_handoff/D2-A5530-RULING-20260923.md`。")
@@ -189,14 +314,17 @@ def write_pending(by):
     A("~~`apply_arbitration_146.py` 入库~~ → ✅ **已完成**（2026-09-19，边集 8,595 → 8,495，见 `M1-10-D10判边仲裁入库结果-20260919.md`）。")
     A("~~D09 33 行人工复核~~ → ✅ **已收口**（2026-09-19，见「三、其他待审」下方的已闭合留档；判定由人工作出，AI 未代签）。")
     A("")
+    n_open, sev_s, con_s, blk_s = open_findings_facts()   # 现算（红线 5）
     A("## 二、复核机械未结项（非阻塞）")
     A("")
     A("验收台账显示 **233/233 单元、3732/3732 事件全闭环、0 阻塞项**，")
-    A("但仍有 **123 条非阻塞提示**（severity 全为 low/minor/info，blocking 全为 False）：")
+    A("但按口径 `binds_current_version ∧ ¬superseded ∧ ¬withdrawn` 现算，"
+      "仍有 **%s 条非阻塞提示**（severity %s；%s）：" % (n_open, sev_s, blk_s))
     A("")
-    A("- 120 条 `accepted_with_findings`、3 条 `accepted`")
+    A("- %s" % con_s)
     A("- 典型内容：事件 type 承载不严、after 值位含复核者声明、个别 source_check 标注偏宽")
-    A("- 详见 `03-d10-workspace/2026-09-08-20-30-19/outputs/full-review-full-20260909/acceptance-ledger.json` 的 `open_findings`")
+    A("- 详见 `03-d10-workspace/2026-09-08-20-30-19/outputs/full-review-full-20260909/acceptance-ledger.json` "
+      "的 `open_findings`（**289 条**，上述 %s 条为其子集；照引 289 会复现不出该数）" % n_open)
     A("")
     A("## 三、其他待审 / 待授权")
     A("")
@@ -244,11 +372,17 @@ def write_pending(by):
       "`payload_path` 以旧根 `%s` 开头；**1,165 / 1,165** 路径链上含同一 junction（`%s` → `%s`），"
       "**但 2026-09-21 晚些时候该判断已被推翻** —— 复跑同一探针得 **1,165 / 1,165 缺失**：OS 已把 `host-workspace` 下**全部 25 个** junction 判为「**不受信任的装入点**」（`WinError 448`；重解析标签 `0xA0000003` = 真 Junction；长路径前缀不能绕过；bash→python 与 PowerShell **两条独立执行路径一致**；系统自 2026-09-15 未重启；目标侧真实路径可读）。⇒ 影响面**大于**本条原判：「旧根路径在原生 Windows 进程下已完全失效」，不只是校验器拒不追随。`AccessLedger.read`（第 118–121 行）**显式拒绝追随 symlink / junction** "
       "⇒ 读 payload 处抛 `ScopeRejected`（已进程内实跑复现：真 `batch-142` 抛错，同文件新根路径可读 31,875 B）。"
-      "另：库内含旧根前缀的被跟踪文件 **313 / 21,208**（03:194 / 01:50 / 02:34 / `_archive`:21 / 根:5 / "
-      "`_migrate`:5 / `.workbuddy-ai`:2 / `_handoff`:2）。**处置三选一，需用户另行授权**："
-      "① 回填冻结索引为新根路径；② 放宽校验器的 junction 禁令（须先论证不破「链接可重定向授权范围」原意）；"
-      "③ 仅登记不改（接受不可复现）。⚠️ 本轨道**未改任何冻结索引、未动 junction** |"
-      % (_OLD_ROOT, _JUNC_SRC, _JUNC_DST))
+      "另：库内含旧根前缀的被跟踪文件 **%s / %s**（%s；`?` = git 不可用，未能现算）"
+      "—— 本行**现算**（读 HEAD 树），**不再硬编码**（红线 5：硬编码计数会静默过期）。"
+      "⚠️ 口径 A = **裸串、无尾分隔符**，且**含本报告文件自身**"
+      "（`_handoff/PENDING.md` 因渲染了该字面量而被计入）⇒ 独立复现者按同一判据应得**同一数字**，"
+      "**不得**为「数字好看」而静默减 1；**口径锚 ≠ 处置面全集**（单正斜杠另有 213 件、双反斜杠 3,555 件，"
+      "部分交叠 ⇒ 处置须按**所有形态的并集**评估）；与 `_handoff/裁定请求-20260928.md` 的 "
+      "**524 / 21,283** 是**不同口径**（单分隔符正则、**无 `+`**）⇒ 两者**不互斥**。"
+      "⭐ **处置已裁（2026-10-20）**：**③ 仅登记不改** —— 项目方 14:33 对话框裁定（`_handoff/DECISIONS-20261020.md` §三），当晚 19:2x 复核**维持③**；scoped 复核**永久不可端到端复现**属明示接受的后果，改用静态核对。①（回填）/②（放宽校验器）**均未采纳**。"
+      "⚠️ **时点注**：2026-10-20 晚删除与 `-1` 逐字节全等的重复副本 `-2`/`-rebuild` ⇒ 索引目录 5 → 3、payload_path 口径 **1,165 → 699**（历史基数 1,165 系当时裁定依据，保留原样）。"
+      "⚠️ **同步说明**：`DECISIONS-20261020.md` §三 所称「已写入 PENDING §四」当日未落生成器（本条当时仍显示「三选一待授权」），本行即补落。⚠️ 本轨道**未改任何冻结索引、未动 junction** |"
+      % (_OLD_ROOT, _JUNC_SRC, _JUNC_DST, n_old, n_tracked, g_old))
     A("| openclaw 与托管 node v22.22.2 不兼容 | 环境 | 需 `>=22.22.3`；用系统 node v24 或走 embedded fallback |")
     A("| 脱敏不彻底 | **安全** | payload 正文仍含真实姓名 → 受限素材不得外发 |")
     A("")
@@ -304,6 +438,7 @@ def write_pending(by):
 
 
 def main():
+    check_status_keys(verbose=True)   # 状态口径自检：不同轴即拒绝生成
     by = load()
     write_progress(by)
     write_pending(by)

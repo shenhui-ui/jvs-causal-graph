@@ -6,7 +6,36 @@ agent_created: true
 
 # 唤起 DSH（DeepSeek Harness）
 
-## 环境事实（本机）
+## ⛔ 前置状态：**本机 DSH 已于 2026-10-07 前完全卸载**（先读这段）
+
+> **2026-10-07 实测**（逐条 `test -e` / `netstat` / `npm ls -g`）：
+>
+> | 判据 | 命令 | 实测 |
+> |---|---|---|
+> | 安装目录 | `ls -d ~/.workbuddy-ai/binaries/node/dsh-install-*` | **0 命中**（`dsh-install-2/3/4` 全不存在） |
+> | 启动器 | `ls ~/.dsh/dsh-web.cmd` | **不存在**（`.ps1` 只在 `dsh-backup-20260910/` 备份里，且它指向已消失的 `dsh-install-3`） |
+> | 全局包 | `npm ls -g --depth=0 \| grep deepseek` | **无 `@deepseek-ai/dsh`** |
+> | 端口 | `netstat -ano \| grep :3080` | **0 监听** |
+> | `DSH_HOME` | `ls ~/.dsh/` | 目录**在**，但只剩 `sessions/ profiles/ attachments/ llm-deepseek/` + **`settings.yaml.imported`**（已改名） |
+>
+> ⇒ **下表是「最后一次实测时（2026-09-10）的状态」，不是现状**；
+> **照下表直接执行会全部失败**。本技能现在的作用是 **① 判断 DSH 是否还在；② 留存历史配置。**
+>
+> 🔴 **2026-10-07 项目方决定：DSH 不重装。**
+> ⇒ 本技能转为 **历史留痕**（仅供查阅当时的安装方式与排障流程），
+> **不要再按本技能去唤起 DSH**。连带后果已登记：技能 `jvs-acp-session-bridge`
+> （方案 D / ACP 桥）的**运行前提永久不可用**；`_handoff/NEXT-交接提醒自动化.md` §5「方案 D：ACP 桥」的可用性随之作废。
+> 若日后改主意要重装，按下方「重装后请先重建上表」的两条命令做，并把实测值写回本表。
+>
+> ⚠️ **为什么它躲过了全部机械门禁**：双副本字节一致、frontmatter 完好、README 登记齐全 ⇒
+> `skills-gate` **28/28 全绿，但内容已失效**。这是「**机械校验只能判机械判据**」的又一实例
+> （由 2026-10-07 技能库组织审计发现，见 `_handoff/技能库组织审计-20261007.md` §4.3）。
+>
+> **（仅在决定重装时）重装后请先重建上表**：`npm view @deepseek-ai/dsh dist-tags`
+> + `ls -d ~/.workbuddy-ai/binaries/node/dsh-install-*` + `ls ~/.dsh/*.cmd`，
+> 并把实测值写回本表（**不要把旧版本号当现状**）。
+
+## 环境事实（本机，**2026-09-10 实测快照 —— 见上方前置状态**）
 
 | 项 | 值 |
 |----|----|

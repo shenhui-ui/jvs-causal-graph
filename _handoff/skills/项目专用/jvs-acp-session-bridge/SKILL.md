@@ -6,6 +6,22 @@ agent_created: true
 
 # JVS ACP 会话桥（dsh --profile acp）
 
+## ⛔ 本技能**永久不可用** —— 本机 DSH 已卸载，且项目方 2026-10-07 决定**不重装**
+
+> **2026-10-07 实测**：`ls -d ~/.workbuddy-ai/binaries/node/dsh-install-*` ⇒ **0 命中**；
+> `npm ls -g | grep deepseek` ⇒ 无 `@deepseek-ai/dsh`；`~/.dsh/dsh-web.cmd` 不存在；
+> 3080 无监听（详见技能 `launch-dsh` 的「前置状态」表与
+> `_handoff/技能库组织审计-20261007.md` §4.3）。
+> 🔴 **项目方决定：DSH 不重装** ⇒ **本技能的全部命令（`dsh --profile acp`）不会再可用**。
+>
+> ⚠️ **但结论不跟着失效**：本技能记录的**能力结论**（DSH 的 ACP profile 提供
+> `session/new | prompt | list | resume`，可编程寻址会话）**是 2026-09-19 的实测事实**，
+> 且**成品桥 `tools/host/acp_bridge.py` 已交付并实测通过**（含强制隐私闸门 fail-closed）。
+> ⇒ 本技能转为**历史实测留痕**：**不要再按本技能去建会话**。
+> ⇒ ⭐ **连带后果（已登记）**：`_handoff/NEXT-交接提醒自动化.md` §5「方案 D：ACP 桥」的**运行前提作废**；
+> 「跨会话寻址工具」缺口**重新变为未解决**（原先记「已由成品桥解决」的说法**不再成立**）；
+> `_handoff/NEXT-交接提醒自动化.md` §5 引用的该路径随之不可用。
+
 ## 这个技能解决什么
 
 JVS 原先缺「跨会话寻址工具」（Codex 的 `create_thread` / `send_message_to_thread` 类），

@@ -200,5 +200,100 @@ class IngestGateTests(unittest.TestCase):
         self.assertEqual(st["inserted"], 0)
 
 
+class WeakExpandFlagTests(unittest.TestCase):
+    """2026-09-28 裁定 Q-2：`weak` 可继续多跳（**opt-in，默认关**）。
+
+    判据纪律：**默认关时必须与旧实现逐值等价** —— 否则「默认关」是空话，
+    而它正是「本裁定不自动改生产行为」的唯一保障。
+    """
+
+    STRENGTHS = ("strong", "weak", "pending", "medium", None)
+    CONFS = (0.9, 0.61, 0.6, 0.5, 0.35, None, "abc", "")
+
+    @staticmethod
+    def legacy(edge):
+        """改动前的实现（逐字重放，作负向对照）。"""
+        if edge.get("strength") in ("weak", "pending"):
+            return False
+        confidence = edge.get("confidence")
+        if confidence is None:
+            return False
+        try:
+            return float(confidence) > 0.6
+        except (TypeError, ValueError):
+            return False
+
+    def setUp(self):
+        self._saved = os.environ.get("JVS_WEAK_EXPAND")
+        os.environ.pop("JVS_WEAK_EXPAND", None)
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        if self._saved is None:
+            os.environ.pop("JVS_WEAK_EXPAND", None)
+        else:
+            os.environ["JVS_WEAK_EXPAND"] = self._saved
+
+    def _cases(self):
+        for s in self.STRENGTHS:
+            for c in self.CONFS:
+                yield {"strength": s, "confidence": c}
+
+    def test_default_off_equals_legacy_on_every_case(self):
+        """⭐ 核心：默认关 ⇒ 与旧实现**逐值等价**（否则就是悄悄改了行为）。"""
+        for edge in self._cases():
+            self.assertEqual(cg._edge_expandable(edge), self.legacy(edge),
+                             "默认关时与旧实现不等价: %r" % (edge,))
+
+    def test_explicit_zero_also_equals_legacy(self):
+        """`JVS_WEAK_EXPAND=0` 必须**真的关**（假值陷阱同族）。"""
+        os.environ["JVS_WEAK_EXPAND"] = "0"
+        for edge in self._cases():
+            self.assertEqual(cg._edge_expandable(edge), self.legacy(edge),
+                             "=0 时与旧实现不等价: %r" % (edge,))
+
+    def test_empty_also_equals_legacy(self):
+        os.environ["JVS_WEAK_EXPAND"] = ""
+        for edge in self._cases():
+            self.assertEqual(cg._edge_expandable(edge), self.legacy(edge))
+
+    def test_flag_on_makes_weak_expandable(self):
+        """正向：开关打开后 weak 高置信边**必须**变为可扩展。"""
+        os.environ["JVS_WEAK_EXPAND"] = "1"
+        self.assertTrue(cg._edge_expandable({"strength": "weak", "confidence": 0.9}))
+        self.assertTrue(cg._edge_expandable({"strength": "weak", "confidence": 0.61}))
+
+    def test_flag_on_still_blocks_low_confidence_weak(self):
+        """放开 weak **不等于**放开低置信：conf ≤ 0.6 仍不可扩展。"""
+        os.environ["JVS_WEAK_EXPAND"] = "1"
+        self.assertFalse(cg._edge_expandable({"strength": "weak", "confidence": 0.6}))
+        self.assertFalse(cg._edge_expandable({"strength": "weak", "confidence": 0.5}))
+        self.assertFalse(cg._edge_expandable({"strength": "weak", "confidence": None}))
+
+    def test_pending_never_expandable_even_when_on(self):
+        """⚠️ `pending` 语义是「不可信」，**不在**本开关范围内。"""
+        os.environ["JVS_WEAK_EXPAND"] = "1"
+        for c in self.CONFS:
+            self.assertFalse(cg._edge_expandable({"strength": "pending", "confidence": c}),
+                             "pending 不得因本开关而可扩展: conf=%r" % (c,))
+
+    def test_tamper_flag_changes_conclusion(self):
+        """反恒真：挪动开关，同一输入必须换结论。"""
+        edge = {"strength": "weak", "confidence": 0.9}
+        off = cg._edge_expandable(edge)
+        os.environ["JVS_WEAK_EXPAND"] = "1"
+        on = cg._edge_expandable(edge)
+        self.assertNotEqual(off, on, "开关挪动后结论不变 ⇒ 开关没被读")
+
+
+class EnvFlagSingleSourceTests(unittest.TestCase):
+    """三态解析必须**只有一份实现**（红线 12 同族：多份复制会静默分叉）。"""
+
+    def test_both_modules_share_one_function_object(self):
+        import llm_answer
+        self.assertIs(llm_answer.env_flag, cg.env_flag,
+                      "两处解析不是同一对象 ⇒ 已被复制成两份实现")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

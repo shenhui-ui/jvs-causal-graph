@@ -23,20 +23,23 @@ from collections import deque
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import causal_graph as cg
+# 三态布尔门控的**单一实现**在 `envflag.py`（2026-09-28 上移）。
+# ⚠️ 这里**直接转出同一个函数对象**（不包一层），并由 `test_llm_answer_env.py` 断言
+#    `llm_answer.env_flag is causal_graph.env_flag` ⇒ 将来谁再复制一份实现，测试立刻红。
+# ⚠️ 不得写成 `bool(os.environ.get(name))`：`NAME=0` 会被判成 True（本项目实测同族 4 处）。
+from envflag import env_flag  # noqa: F401
 from m1_10_pipeline import load_events, extract_keywords, retrieve, _search_text
 
 
 def _edge_expandable(edge):
-    """只有非 weak/pending 且置信度高于 0.6 的边才可继续多跳。"""
-    if edge.get("strength") in ("weak", "pending"):
-        return False
-    confidence = edge.get("confidence")
-    if confidence is None:
-        return False
-    try:
-        return float(confidence) > 0.6
-    except (TypeError, ValueError):
-        return False
+    """**委托** `causal_graph._edge_expandable`（单一真值源）。
+
+    ⚠️ 2026-09-28：原先是**另一份复制**。两套遍历实现各带一份判据 ⇒ 只改一处即静默分叉
+    （红线 12「同一图可能有多套遍历实现，必须全测」）。
+    现改为委托，并由 `test_llm_answer_env.py` 断言二者**同一函数对象**。
+    保留本名是为了不动调用方（`chain_recall` / `build_prompt` 侧）。
+    """
+    return cg._edge_expandable(edge)
 
 API_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
 MODEL = "doubao"
@@ -44,6 +47,8 @@ CRED = r"C:\Users\<user>\.dsh\.credentials.yaml"
 GAP_SECONDS = int(os.environ.get("LLM_GAP", "16"))
 RETRY_WAIT = 66
 MAX_RETRY = 6
+
+
 
 # provider 配置: doubao(默认,火山方舟) | sensenova(备选)
 PROVIDERS = {
@@ -143,7 +148,7 @@ def chain_recall(db_path, event_id, max_hops=3):
     # 工程修复 v8-rev: LLM_REV_EDGES=1 时反向(cause/trigger)边纳入证据链。
     # 旧行为反向边只计数不进链——问"为什么X"时锚点是结果事件,上游原因永远召不回,
     # 这正是 cause_hit 长期瓶颈的根因(v3 补边方向全是 原因→结果, 入边不受此修复影响)。
-    rev_ok = bool(os.environ.get("LLM_REV_EDGES"))
+    rev_ok = env_flag("LLM_REV_EDGES")
     queue = deque([(event_id, 0)])
     while queue:
         node, depth = queue.popleft()
@@ -439,7 +444,7 @@ def build_prompt(q, anchor, chain, evs, extra_anchors=None, neighbors=None):
             lines.append(f"- [{'+' if delta > 0 else ''}{delta}天] ({e.get('ts')}) "
                          f"{e.get('type')}|{e.get('subject')}|{e.get('action')}|{e.get('object')}"
                          + (f" after:{e.get('after')}" if e.get("after") else ""))
-    if os.environ.get("LLM_PROMPT_CAUSE"):  # 工程修复 v6-eng: 动因区分提示
+    if env_flag("LLM_PROMPT_CAUSE"):  # 工程修复 v6-eng: 动因区分提示
         lines.append("回答提示：「原因」优先回答直接触发因素（已发生的具体事实/问题/数据）,"
                      "而非「为了什么」的目的性动机;两者都要说时,直接触发因素放最前。")
     if os.environ.get("LLM_PROMPT_ORIGIN", "1") != "0":  # round-2 O2: 出处/背景题覆盖变更语境(默认开,置0关)
@@ -492,7 +497,7 @@ def prepare_question(db_path, q, events):
     if os.environ.get("LLM_RETRIEVE_HYBRID", "1") != "0":
         anchors = retrieve_hybrid(events, kws, q.get("question", ""), k=3) or anchors
     fallback_used = 0
-    if os.environ.get("LLM_FALLBACK") and not anchors:
+    if env_flag("LLM_FALLBACK") and not anchors:
         fb = retrieve_fallback(events, q.get("question", ""), k=3)
         if fb:
             anchors = fb
@@ -513,7 +518,7 @@ def prepare_question(db_path, q, events):
         ))
     anchor = anchors[0] if anchors else None
     neighbors = []
-    if anchor is not None and os.environ.get("LLM_NEIGHBORS"):
+    if anchor is not None and env_flag("LLM_NEIGHBORS"):
         ids = {a.get("id") or a.get("event_id") for a in anchors}
         neighbors = [item for item in temporal_neighbors(events, anchor, days=12, limit=5)
                      if (item[1].get("id") or item[1].get("event_id")) not in ids][:4]

@@ -13,8 +13,18 @@
 | `s4_pipeline.py` | M1-08 | 预处理/调度总控:`candidates` / `batches` / `merge` / `report` 四个子命令 |
 | `extract_regression.py` | M1-09 | 抽取回归:读 `s3_*` 批结果,输出 `regression-report.md` |
 | `llm_answer.py` | M1-10 | 图谱检索后调用模型生成答案；`chat()` 提供共享传输层 |
-| `llm_judge.py` | M1-10 | 真实模型语义判分、成功断点复用、错误分类及固定 gold 分母 |
+| `llm_judge.py` | M1-10 | 真实模型语义判分、逐题 `rationale` 留存、成功断点复用、错误分类及固定 gold 分母 |
 | `test_llm_judge.py` | 回归 | 纯离线验证判分、重试、断点、隐私和超时边界 |
+| `test_llm_judge_rationale.py` | 回归 | 纯离线验证逐题 `rationale` 的留存契约与「只增」性质；`--self-test` 证明未修复版必 FAIL |
+| `judge_drift_guard.py` | P1-3 | **判分侧漂移的前置自证件**（红线 25）：跨时间对照两份 `scores` 之前必须先跑；离线 `--replay` / 产物对比 `--replay-scores` / 在线 `--live` 三模式 |
+| `fallback.yaml` | M1-11 | **降级判据的单一真值源**：三类定义（无链 / 低置信 / 弱关联）+ 阈值 + 待裁定清单 |
+| `why_fallback.py` | M1-11 | 把 `causal_graph.why()` 输出分成三类降级并给降级陈述；阈值只从 `fallback.yaml` 读 |
+| `miniyaml.py` | 支撑 | 极简 YAML 读取器（纯标准库；读不懂即抛错，不静默忽略） |
+| `envflag.py` | 支撑 | **三态布尔门控的单一实现**（未设置/空 ⇒ default；`0\|false\|no\|off` ⇒ False）。⚠️ 不得再复制第二份 |
+| `make_m1_11_samples.py` | M1-11 | 三类降级样例生成器（改判口径：无链 ≥3 ｜ 弱关联 ≥3 ｜ 低置信 空集证明 + fixture ≥3） |
+| `ab_why_traversal.py` | 回归 | **遍历类** A/B：对同一批锚点跑真实入口，逐字段比对遍历输出 |
+| `test_why_fallback.py` | 回归 | 分类器正/负例 + **篡改输入必须换类** + 配置驱动（挪阈值即换类） |
+| `test_llm_answer_env.py` | 回归 | `LLM_*` 门控的**三态**自证（未设置 / 空 / `=1` 行为须各异） |
 | `README-run.md` | — | 本说明 |
 
 ---
@@ -150,11 +160,55 @@ python extract_regression.py --base . --pattern 's3_*.txt' \
 ## 四、py_compile 校验
 
 ```bash
-python -m py_compile s4_pipeline.py extract_regression.py llm_judge.py test_llm_judge.py
+python -m py_compile s4_pipeline.py extract_regression.py llm_judge.py test_llm_judge.py \
+    judge_drift_guard.py test_llm_judge_rationale.py
 python -B test_llm_judge.py
+python -B test_llm_judge_rationale.py --self-test   # 含「未修复版必须 FAIL」负向臂
+python -B judge_drift_guard.py --self-test          # 13 类夹具（门禁 [3] 段接线）
 ```
 
 回归夹具使用系统临时目录并注册自动清理，不写入源码目录；测试会阻止真实网络请求，不读取生产图谱或凭证。
+
+---
+
+## 四点五、M1-11 why() 降级判据
+
+三类降级：**无链**（遍历输出 0 条边）、**低置信**（最优路径边置信 < 阈值）、**弱关联**（仅 weak 边且跳数达标）。
+阈值**只**写在 `fallback.yaml`，代码不得再硬编码第二份。
+
+```bash
+# 单事件分类（只读）
+python why_fallback.py <db> <event_id> --max-hops 3          # 人类可读
+python why_fallback.py <db> <event_id> --json                # 完整测度
+
+# 回归
+python -B test_why_fallback.py       # 分类器：正例 + 篡改输入 + 配置驱动
+python -B test_llm_answer_env.py     # 环境门控三态
+
+# 三类样例生成（改判口径；生成器自身会为「弱关联」设 JVS_WEAK_EXPAND=1）
+python make_m1_11_samples.py --db <db> --out <jsonl> --per-class 5
+
+# 类分布（扫**全量**事件；两种开关状态）—— 台账 §2/§8 数字的唯一复跑命令
+python make_m1_11_samples.py --db <db> --full-scan
+#   ⚠️ 与 --out 用的 `_scan_class` 不是同一个函数：后者**按类限额提前 break**（为构造样例提速），
+#      只回答「够不够 3 条」，给不出完整分布。
+
+# 遍历类 A/B（改 why()/chain_recall() 后必跑）
+python ab_why_traversal.py snapshot --db <db> --module-dir <目录> --out <jsonl> --limit 40
+python ab_why_traversal.py compare  --a <jsonl> --b <jsonl>      # rc=0 表示逐字段一致
+```
+
+**判据纪律**（改这里之前先读）：
+
+- `fallback.yaml` 已 **`status: locked`（version 2，2026-09-28）** —— 四项待裁定（Q-1…Q-4）已由项目方裁定，决策留档在 `rulings` 段，完整记录见 `docs/host_memory_dump/M1-11-待裁定项决策记录-20260928.md`。**再改阈值须走新的裁定并修订 `version` / `locked_at`**，不得由代码绕过。
+  ⚠️ **0.5 与 0.6 不是同一个量**：`0.5` 是立项书 §4 原文（历史），`0.6` 是现行分类阈值，扩展闸门同样是 0.6。三者关系写在 `rulings.Q-1.consequence`。
+- ⚠️ **`JVS_WEAK_EXPAND`（默认关）**：2026-09-28 裁定 Q-2 让 `weak` 边**可继续多跳**，以打通「弱关联 = 仅 weak 边且 ≥2 跳」这一类（改前该类在 `why()` 中**算法不可达**）。
+  **默认关时遍历输出与改动前逐字段 0 差异**（A/B 已验）；开时全量扫描下该类可达锚点 **0 → 8**。
+  ⚠️ 把**生产默认**改成「开」是**另一项口径变更**（会改 `chain_recall` ⇒ 改答案 ⇒ 可能改主验收读数），须评审会批准 + 全量重评。
+  ⚠️ `pending` **不在**本开关范围内（它的语义是「不可信」，与 `weak` 不是一回事）。
+- `why()` 与 `chain_recall()` 是**两套**遍历入口 ⇒ 遍历类改动**两套都要跑 A/B**，且比的是**有序边序列的逐字段快照**，不是「边集合相等」。实测证明：关掉反向边时节点集合的差异很小，但边序列有 435 处移除 / 4 处新增 —— 集合比较会漏掉这类「谁先认领节点」的顺序扰动。
+  ⚠️ 2026-09-28 起 `llm_answer._edge_expandable` 已改为**委托** `causal_graph._edge_expandable`（消除复制）；`test_causal_graph.py::EnvFlagSingleSourceTests` 断言两模块的 `env_flag` 是**同一函数对象**，防止再被复制。
+- 环境门控一律走 `envflag.env_flag()`（`llm_answer.env_flag` 与 `causal_graph.env_flag` 是同一对象）；**不得**写 `bool(os.environ.get(...))` 或裸 `if os.environ.get("X")` —— `"0"` 会被判为真。`test_llm_answer_env.py::ShapeTests` 会用正则拒绝这种写法再次出现。
 
 ## 五、M1-10 真实判分、错误与断点
 
@@ -175,6 +229,48 @@ LLM_PROVIDER=sensenova LLM_JUDGE_MAX_TOKENS=4096 python llm_judge.py \
 - 仅复用 `judge_ok is True`、四个布尔字段合法、无错误类型且指纹匹配的记录。合法的 `available=false` 也可复用，它是语义判断成功而非请求失败。
 - 指纹绑定题目、gold、答案正文、答案状态、实际 provider/model、端点和判分提示配置；凭证不参与指纹。端点只在结果元数据中保存 SHA-256，不保存 URL 中可能存在的凭证。旧版只记录环境模型名的指纹不会被误当作当前有效配置；升级后请用新输出路径，不要直接重跑冻结结果路径。
 - 每次落盘保留尚未遍历的成功断点；中途退出不会因较早 qid 重判而丢失后序成功项。仅延迟改变时刷新 `latency_ms`，不重复语义判分。
+
+### 逐题 `rationale` 留存（P1-4，2026-09-29）
+
+- 判分提示额外要求模型给出判定理由；成功判分的 `items[].rationale` 落该理由，**失败记录写空串占位**。
+- 契约（**只增字段**，勿单侧改动）：
+  - 缺失 / `null` ⇒ `""`（宽松：兼容未要求 `rationale` 的历史响应与旧断点）；
+  - 非字符串（数字 / 对象 / 数组）⇒ `response_schema_invalid`（严格：能拒绝）；
+  - 超长 ⇒ 静默截断到 `RATIONALE_MAX_CHARS`（600），**不改变任何布尔判定**。
+- `rationale` **不进** `JUDGE_FIELDS`、**不进** `metrics` / `metric_counts` / `error_counts` / `meta`，
+  `judge_channel` 逐字不变 ⇒ 所有既有指标**逐字节不变**。
+- `parse_json(text, with_rationale=False)` 的**默认**返回值仍与历史版本逐字节相同（只返回 4 个布尔字段），
+  故既有调用方与 30 个既有回归件无需改动；只有 `judge_answer()` 走 `with_rationale=True`。
+- ⚠️ **提示词变化会改变 `input_fingerprint`** ⇒ 历史断点与旧 `scores` 不再被复用。这是**有意的**
+  失效机制（否则会拿旧口径的判定配新口径的提示），不是回归；跨时间对照前先跑下节的漂移自证。
+
+### 判分侧漂移的前置自证（P1-3，红线 25 制度化）
+
+**同一模型名 ≠ 同一模型。** 实测：同一份答案文本、同一 `input_fingerprint`、同一模型名
+（`deepseek-v4-pro`），2026-09-18 判 `cause=true`，2026-09-23 判 `cause=false`。
+⇒ **跨时间对照判分派生的指标之前，必须先跑本件**；未通过时**新旧 `scores` 之差不得当效应量**。
+
+```bash
+# ① 离线（零 LLM）：重放录制好的判分响应
+python -B judge_drift_guard.py --baseline 旧scores.json --replay responses.jsonl --out report.json
+# ② 对比两份判分产物（同输入重判的常见形态）；--qids 显式声明同轴题集
+python -B judge_drift_guard.py --baseline 旧scores.json --replay-scores 新scores.json --qids D10-H01
+# ③ 在线：走真实入口（llm_judge.py 子进程）重判同一批输入
+python -B judge_drift_guard.py --baseline 旧scores.json --answers a.jsonl --gold g.jsonl --live
+```
+
+判据（自包含在 `decide()` 内）与四种结论：
+
+| 结论 | 触发条件 | 退出码 |
+|---|---|---|
+| `PASS` | 题集完备、判分有效、字段为 bool、**指纹一致**、0 翻转 | 0 |
+| `DRIFT` | 以上皆过但出现翻转（同输入已核验） | 1 |
+| `REFUSE` | 题集不完备 / 空交集 / 重复 qid / `judge_ok≠true` / 字段非 bool 或缺失 | 1 |
+| `NOT_SAME_INPUT` | 两侧 `input_fingerprint` 不一致 ⇒ **不是同输入重判**，翻转不得归因判分侧漂移 | 1 |
+
+⚠️ 任一侧缺 `input_fingerprint` 时无法机器核验，报告显式标 `same_input_verified=false`，**不静默放过**。
+负向自证 `--self-test` 用 13 类夹具覆盖四个方向（REFUSE 7 / DRIFT 3 / NOT_SAME_INPUT 1 / PASS 2），
+既证明「能拒绝」也证明「不是恒拒」。真实已裁决样本标定见 `_staging/p13-calibration-20260929/`。
 
 ### 有界重试与错误类型
 

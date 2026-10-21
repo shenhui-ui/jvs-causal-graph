@@ -6,6 +6,12 @@ r"""llm_judge.py — M1-10 LLM 判分层：逐题语义判定三要素(cause/eff
 输出: <out>/scores-llm-judge.json（与 eval_m1 scores 兼容的核心指标 + 逐题明细）
 限速: 题间默认 16s;空响应/非法 JSON 最多额外请求一次;传输重试由 chat() 独立负责。
 断点只复用合法成功判分;失败记录保留诊断并在下次运行重判，不改变 gold 分母。
+
+逐题 rationale 留存（P1-4，2026-09-29）：判分提示额外要求模型给出判定理由，逐题落在
+`items[].rationale`。**只增字段** —— 不参与任何指标分子/分母、不进 meta、不改 judge_channel；
+`parse_json()` 的默认返回值仍是与历史版本逐字节相同的 4 布尔字典（既有调用方与回归件行为不变）。
+⚠️ 判分提示变化会改变 `input_fingerprint` ⇒ 历史断点/旧 scores 不再被复用（这是**有意的**
+失效机制，不是回归）；跨时间对照 `scores` 之前必须先跑 `judge_drift_guard.py`（红线 25）。
 """
 import argparse
 import hashlib
@@ -49,13 +55,23 @@ def judge_prompt(question, gold, answer_text):
         f"标准答案-evidence_hint：{gold.get('evidence_hint', '')}\n"
         f"被评答案：\n{answer_text}\n"
         '只输出 JSON（不要其他文字）：{"cause": true/false, "effect": true/false, '
-        '"evidence_hint": true/false, "available": true/false}\n'
-        "available = 被评答案确实在回答该问题（非空话、非失败信息、非拒答）。"
+        '"evidence_hint": true/false, "available": true/false, "rationale": "…"}\n'
+        "available = 被评答案确实在回答该问题（非空话、非失败信息、非拒答）。\n"
+        "- rationale：用不超过 200 字说明本次判定的依据。凡判 false 的要素，必须指出"
+        "**标准答案里的哪一点**没有被被评答案命中；四项全 true 时指出命中的依据。"
+        "只依据给定的标准答案与被评答案，不得引入外部知识，不得复述答案全文。"
     )
     return rubric
 
 
 JUDGE_FIELDS = ("cause", "effect", "evidence_hint", "available")
+# 逐题判分理由（P1-4）。契约（与 README-run.md §五 一致，勿单侧改动）：
+#   · 缺失 / None      ⇒ ""（宽松：兼容未要求 rationale 的历史响应与旧断点）
+#   · 非字符串（数字/对象/数组） ⇒ response_schema_invalid（严格：能拒绝，红线 10）
+#   · 超长             ⇒ 静默截断到 RATIONALE_MAX_CHARS（不改变任何布尔判定）
+# ⚠️ 本字段**只增**：不进 JUDGE_FIELDS、不进 metrics/meta，故所有既有指标逐字节不变。
+RATIONALE_FIELD = "rationale"
+RATIONALE_MAX_CHARS = 600
 MAX_PARSE_RETRIES = 1
 RETRYABLE_RESPONSE_ERRORS = {"response_empty", "response_invalid_json"}
 ERROR_MESSAGES = {
@@ -88,8 +104,22 @@ def _unique_json_object(pairs):
     return result
 
 
-def parse_json(text):
-    """Accept a complete object or fenced object, with strict boolean fields."""
+def normalize_rationale(value):
+    """Rationale is optional but typed: absent/None -> ""; non-string -> schema error."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise JudgeResponseError("response_schema_invalid")
+    return value.strip()[:RATIONALE_MAX_CHARS]
+
+
+def parse_json(text, with_rationale=False):
+    """Accept a complete object or fenced object, with strict boolean fields.
+
+    with_rationale=False（默认）返回与历史版本**逐字节相同**的 4 布尔字典 ——
+    既有调用方与回归件的行为不变（这是 P1-4 的「只增」前提）。
+    with_rationale=True 时额外附上 `RATIONALE_FIELD`（缺省 ""），供逐题留存。
+    """
     if text is None or (isinstance(text, str) and not text.strip()):
         raise JudgeResponseError("response_empty")
     if not isinstance(text, str):
@@ -107,7 +137,10 @@ def parse_json(text):
         raise JudgeResponseError("response_invalid_json") from exc
     if not isinstance(d, dict) or any(type(d.get(k)) is not bool for k in JUDGE_FIELDS):
         raise JudgeResponseError("response_schema_invalid")
-    return {k: d[k] for k in JUDGE_FIELDS}
+    fields = {k: d[k] for k in JUDGE_FIELDS}
+    if not with_rationale:
+        return fields
+    return {**fields, RATIONALE_FIELD: normalize_rationale(d.get(RATIONALE_FIELD))}
 
 
 def _http_status(exc):
@@ -158,6 +191,7 @@ def _safe_error_text(exc):
 def _judge_failure(error_type, attempts=0, attempt_errors=None, exc=None):
     return {
         **dict.fromkeys(JUDGE_FIELDS, False),
+        RATIONALE_FIELD: "",
         "judge_ok": False,
         "judge_err": _safe_error_text(exc) if exc is not None else ERROR_MESSAGES[error_type],
         "error_type": error_type,
@@ -182,7 +216,7 @@ def judge_answer(prompt, max_tokens, parse_retries=MAX_PARSE_RETRIES):
             errors.append(error_type)
             return _judge_failure(error_type, attempt, errors, exc)
         try:
-            result = parse_json(raw)
+            result = parse_json(raw, with_rationale=True)
         except JudgeResponseError as exc:
             errors.append(exc.error_type)
             if exc.error_type in RETRYABLE_RESPONSE_ERRORS and attempt <= parse_retries:
@@ -253,12 +287,16 @@ def _load_checkpoint(path, expected):
             if not isinstance(row, dict) or row.get("qid") is None:
                 continue
             qid = str(row["qid"])
+            rationale = row.get(RATIONALE_FIELD, "")
             if (qid not in expected or row.get("input_fingerprint") != expected[qid]
                     or row.get("judge_ok") is not True
                     or any(type(row.get(k)) is not bool for k in JUDGE_FIELDS)
-                    or row.get("error_type")):
+                    or row.get("error_type")
+                    or (rationale is not None and not isinstance(rationale, str))):
                 continue
-            done[qid] = {**row, "qid": qid, "judge_err": "", "error_type": "",
+            done[qid] = {**row, "qid": qid,
+                         RATIONALE_FIELD: (rationale or "").strip()[:RATIONALE_MAX_CHARS],
+                         "judge_err": "", "error_type": "",
                          "unavailable_reason": "" if row["available"]
                          else "语义不可用：答案未有效回答问题"}
     except (json.JSONDecodeError, OSError, ValueError) as exc:

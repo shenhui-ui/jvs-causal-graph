@@ -107,6 +107,13 @@
 `send_message_to_thread` / `navigate_to_codex_page`
 
 ⚠️ **但 2026-09-19 勘察 + 实测发现「部分有解」，本节口径须修正**：
+
+> ⛔ **订正块（2026-10-18）—— 本节的运行前提已作废**
+> 本机 **DSH 已完全卸载**，且项目方 **2026-10-07 裁定「不重装」** ⇒
+> **「本机 DSH `--profile acp` 提供等价底座」这一路径当前不可用**，
+> ⭐ **「跨会话寻址工具」缺口重新变为「未解决」**（原先记「已由成品桥解决」不再成立）。
+> 下文的**能力结论保留为 2026-09-19 实测留痕**（不撤回）；现测判据见技能 `jvs-acp-session-bridge` 顶部订正块。
+
 本机 DSH `--profile acp` 提供 `session/new`（≈`create_thread`）/ `session/prompt`（≈`send_message_to_thread`）/
 `session/list`（≈`list_projects`）/ `session/resume`，**零安装**，**已端到端实测打通**，
 且**成品桥已交付**（`tools/host/acp_bridge.py` + `README-acp-bridge.md`）。

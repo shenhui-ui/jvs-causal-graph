@@ -12,7 +12,8 @@
 
 ## 0. 一句话
 
-**「完成」= §1–§9 全绿**（按任务类型裁剪，见 §10）。任何一步不绿 ⇒ **未完成** ——
+**「完成」= §1–§9 全绿**（按任务类型裁剪，见 §10；涉及**跨时间对照判分产物**时 **§12** 亦为必做）。
+任何一步不绿 ⇒ **未完成** ——
 不得宣告完成、不得交接、不得删分支。
 
 ## 1. 编辑存活核验（⭐ 必须排在跑生成器之前）
@@ -112,6 +113,17 @@ git ls-tree -r --name-only HEAD -- <新目录> | wc -l   # 必须 > 0
 
 ## 6. 工作区收尾三条
 
+> ⚠️ **第 0 条（提交前必做，2026-10-06 新增）**：**看 `git status --porcelain` 的完整列表**，
+> 逐行确认每一条都是本轮预期改动。
+> **为什么**：`git add -A` 会**静默**把意外产生的文件一并暂存 —— 实测一次事故：
+> 用 `python -c "…"` 内联一段**含 `>` 的字符串**时，bash 把 `>` 当**重定向**，
+> 于是在**仓库根目录造出 35 个垃圾文件**（名字形如 `→` / `⇒` / `⚠️` / `⭐` / `做 独立复核…`），
+> `git add -A` 全部纳入暂存；六步也因此报「未归类 **36**」（正常为 1）。
+> ⇒ **两条纪律**：① **绝不用 `python -c "…"` 内联含 `>` / 反引号 / `|` 的文本** ——
+> 一律**先 Write 成 `.py` 文件再执行**；② 提交前**看列表**（本轮正是靠 porcelain 里那串诡异名字当场发现）。
+> 处置办法（若已发生）：按 `git diff --cached --diff-filter=A` 取新增项，**DRY-RUN 打印**后再删，
+> 删完 `git add -A`（从未提交的文件删盘即出索引）并**重跑六步**（六步已按污染态算过索引）。
+
 ```bash
 git ls-files --deleted | wc -l            # → 0
 git status --porcelain | wc -l            # → 0
@@ -173,6 +185,7 @@ git check-ignore -v <path>              # 查是否被忽略，并打印规则�
 | 只改文档、无生成器产物 | §1 §4 §5 §6 §9 | §2（§3 视仓库策略） |
 | 改技能 | §1 §2 §3 §4 §5 §6 §8 §9 | — |
 | 改受限素材 | 额外走独立本地库流程 | 见技能 `jvs-restricted-review-backfill` |
+| ⭐ **跨时间对照判分产物**（新旧 `scores` / 指标读数） | **§12 先行且必须 PASS**，再按上表裁剪 | — |
 
 ## 11. 技能里的写法约定（防止再造真值源）
 
@@ -189,3 +202,46 @@ git check-ignore -v <path>              # 查是否被忽略，并打印规则�
 - **禁止**在技能里重复 §1–§9 的通用项 —— **本文是唯一真值源**。
 - 技能专属项**必须保留**：那些只有该技能才适用的判据（如 `validate` 输出字段、
   受限库内先提交、逐字节还原、A/B 判据等）。
+
+## 12. 判分侧漂移防护（红线 25 制度化，2026-09-29）
+
+> **本节的落点是「纪律有明确落点」，不是「只写在红线表里」。** 对应 P1-3。
+
+### 12.1 铁律
+
+**凡要跨时间对照由 LLM 判分派生的任何指标（`cause_hit` / `causal_accuracy` /
+`availability` / `judge_success_rate` …），必须先跑 `judge_drift_guard.py` 并取得 `PASS`。**
+
+未取得 `PASS` ⇒ **新旧 `scores.json` 之差不得作为效应量**，只能作为「待核验」登记。
+
+### 12.2 判据（自证件 + 四种结论）
+
+```bash
+PY="C:/Users/<user>/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe"
+G="01-host-product/2026-08-28-20-59-40/tools/causal/judge_drift_guard.py"
+
+# ① 离线（零 LLM，首选）：重放录制响应
+"$PY" -B "$G" --baseline 旧scores.json --replay responses.jsonl --out report.json
+# ② 对比两份判分产物；--qids 显式声明同轴题集
+"$PY" -B "$G" --baseline 旧scores.json --replay-scores 新scores.json --qids <qid,...>
+# ③ 在线（消耗配额）：走真实入口重判同一批输入
+"$PY" -B "$G" --baseline 旧scores.json --answers a.jsonl --gold g.jsonl --live
+```
+
+| 结论 | 含义 | 退出码 | 允许的后续动作 |
+|---|---|---|---|
+| `PASS` | 同输入、判分有效、0 翻转 | 0 | 可作同轴对照 |
+| `DRIFT` | 同输入但出现翻转 | 1 | **停**：登记漂移，不得出效应量 |
+| `REFUSE` | 题集不完备 / 空交集 / 重复 qid / 判分失败 / 字段非法 | 1 | **停**：先补齐可比性 |
+| `NOT_SAME_INPUT` | 两侧 `input_fingerprint` 不一致 | 1 | **停**：这不是同输入重判 |
+
+- ⚠️ **`REFUSE` 不得被读成「无漂移」** —— 空交集/缺题时「0 翻转」是假阴性。
+- ⚠️ **判分失败 ≠ 判定为假**（红线 23）：任一侧 `judge_ok≠true` 一律 `REFUSE`，不得拿占位 `false` 去比。
+- ⚠️ 任一侧缺 `input_fingerprint` ⇒ 报告标 `same_input_verified=false`，**不静默放过**。
+
+### 12.3 机械守卫与证据
+
+- `scripts/git-gate.sh` **[3] 段**跑 `judge_drift_guard.py --self-test`（13 类夹具，阻塞）。
+- 夹具覆盖四方向（REFUSE 7 / DRIFT 3 / NOT_SAME_INPUT 1 / PASS 2）⇒ **能拒绝**且**不是恒拒**。
+- 真实已裁决样本标定：`_staging/p13-calibration-20260929/` ——
+  同 `input_fingerprint` 的 09-18/09-23 对 ⇒ `DRIFT`；不同输入的两次 D10 运行 ⇒ `NOT_SAME_INPUT`；自比 ⇒ `PASS`。

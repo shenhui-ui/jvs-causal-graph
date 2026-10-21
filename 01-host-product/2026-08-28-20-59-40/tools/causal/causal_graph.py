@@ -16,6 +16,9 @@ evid_docs 三张 SQLite 表(邻接表建模因果图),提供写入与两类查�
 - 入库闸门:边入库前按 `confidence` 归一 `strength`(见 `CONF_GATE` / `_normalize_edge`)——
   `confidence` 不可解析或 ≤ 0.6 ⇒ 改标 `pending` **但仍入库**(保留"一跳线索"用途,
   不再参与多跳);> 0.6 ⇒ `strong`/`weak` 二值。可用环境变量 `JVS_CONF_GATE=0` 关闭。
+- 多跳扩展:默认只有「非 weak/pending 且 conf > 0.6」的边可继续多跳;
+  环境变量 `JVS_WEAK_EXPAND=1` 可放开 `weak`(**默认关**,见 `_edge_expandable` 与裁定 Q-2)。
+  `pending` 始终不可扩展。
 - 查询端口:why / timeline 接收 db_path,自行打开连接并关闭。
 - 数据校验:事件 id 唯一(重复报警并跳过);边必须两端事件已存在(否则跳过
   并计入 warn);ts 为空时落为字符串 "unknown"。
@@ -53,6 +56,13 @@ import sqlite3
 import sys
 from collections import defaultdict, deque
 
+# 三态布尔门控的**单一实现**（`envflag.py`）。⚠️ 不要在本文件再写一份解析：
+# 同一判据多份复制会静默分叉（本项目已实测 4 处 `bool(os.environ.get(...))` 假值陷阱）。
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+from envflag import env_flag  # noqa: E402
+
 # 允许进入反向 BFS 的边类型(反向 = 顺着 to_event -> from_event 回溯)。
 _ALLOWED_REVERSE_TYPES = ("cause", "trigger", "supersede", "evolve", "resolve")
 
@@ -62,6 +72,21 @@ _ALLOWED_REVERSE_TYPES = ("cause", "trigger", "supersede", "evolve", "resolve")
 # ⇒ 判定「能否继续多跳」的唯一权威是 **confidence**(见 `_edge_expandable`),
 #    `strength` 只是它的**展示标签**,不得与 `confidence` 不一致。
 CONF_GATE = 0.6
+
+# 让 `weak` 边可继续多跳的开关（**opt-in，默认关**）。
+# 2026-09-28 裁定 Q-2：立项书 §4 的「弱关联 = 仅 weak 边且 ≥2 跳」与旧实现不相容
+# （weak 边永不入队 ⇒ 该类算法不可达）⇒ 裁定「改实现让 weak 可扩展」。
+# ⚠️ 默认**关** ⇒ 旧行为**逐字可复现**（A/B 已验 0 差异）。
+# ⚠️ 把**生产默认**改成「开」是**另一项口径变更**（会改 `chain_recall` ⇒ 改答案 ⇒
+#    可能改主验收读数），须评审会批准 + 全量重评 ⇒ 不得在未批准前改默认值。
+# ⚠️ `pending` **不在**本开关范围内：`pending` 语义是「不可信」（conf ≤ 0.6 或不可解析），
+#    与 `weak`（可信但关联弱）不是一回事。
+WEAK_EXPAND_ENV = "JVS_WEAK_EXPAND"
+
+
+def _weak_expand_enabled():
+    """`JVS_WEAK_EXPAND` 是否为真（未设置/空 ⇒ 关）。"""
+    return env_flag(WEAK_EXPAND_ENV, default=False)
 
 
 def _gate_enabled():
@@ -122,14 +147,25 @@ def _normalize_edge(edge, stats):
 
 
 def _edge_expandable(edge):
-    """只有非 weak/pending 且置信度高于 0.6 的边才可继续多跳。"""
-    if edge.get("strength") in ("weak", "pending"):
+    """只有非 weak/pending 且置信度高于 `CONF_GATE` 的边才可继续多跳。
+
+    ⚠️ 2026-09-28 裁定 Q-2：`strength = weak` 的边**可**继续多跳（由 `JVS_WEAK_EXPAND` 控制，
+    **默认关**）。默认关时本函数与旧实现**行为等价**（已由单测与遍历 A/B 双重验证）：
+    旧式 `strength in ("weak","pending") ⇒ False` 与新式「pending 直接 False；
+    weak 且开关关 ⇒ False」在全部取值上同值。
+
+    `pending` **始终**不可扩展 —— 它的语义是「不可信」，与 `weak` 不是一回事。
+    """
+    strength = edge.get("strength")
+    if strength == "pending":
+        return False
+    if strength == "weak" and not _weak_expand_enabled():
         return False
     confidence = edge.get("confidence")
     if confidence is None:
         return False
     try:
-        return float(confidence) > 0.6
+        return float(confidence) > CONF_GATE
     except (TypeError, ValueError):
         return False
 

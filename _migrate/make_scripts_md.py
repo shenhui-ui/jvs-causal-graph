@@ -19,6 +19,29 @@ CORE = {
         "candidates 产出四通道候选（邻接 / 共指 / 关键词 / 语义嵌入），"
         "嵌入通道走本机 Ollama `bge-m3`（不可用时降级并告警）",
         "python s4_pipeline.py candidates --events all-real-events.jsonl --out candidates-m1.jsonl --max-candidates 600 --window-days 7"),
+    "tools/causal/why_fallback.py": (
+        "因果图谱引擎", "开发中", "离线",
+        "M1-11 三类降级判据分类器：把 `why()` 输出分「无链 / 低置信 / 弱关联」并给降级陈述 + 原始测度；"
+        "阈值**只**从 `fallback.yaml` 读（当前 `status: draft_pending_ruling`）",
+        "python why_fallback.py <db> <event_id> [--max-hops 3] [--json]"),
+    "tools/causal/ab_why_traversal.py": (
+        "因果图谱引擎", "已开发", "离线",
+        "**遍历类 A/B**：对同一批锚点跑真实入口（`why()` 与 `chain_recall()`），"
+        "比**有序边序列的逐字段快照**（不是边集合 —— 集合相等会漏掉「谁先认领节点」的顺序扰动）",
+        "python ab_why_traversal.py snapshot --db <db> --module-dir <目录> --out <jsonl> --limit 40   |   compare --a <jsonl> --b <jsonl>"),
+    "tools/causal/make_m1_11_samples.py": (
+        "因果图谱引擎", "开发中", "离线",
+        "M1-11 三类样例生成器：**只生成能证明的**（「无链」类），"
+        "另两类写 `blocked_pending_ruling` 占位并**拒绝伪造**",
+        "python make_m1_11_samples.py --db <db> --out <jsonl> --per-class 5"),
+    "tools/causal/test_why_fallback.py": (
+        "因果图谱引擎", "已开发", "离线",
+        "降级分类器回归：正例 + **篡改输入必换类** + 配置驱动（挪阈值即换类）+ 真实图谱冒烟（**不联网**，自检项之一）",
+        "python -B test_why_fallback.py"),
+    "tools/causal/test_llm_answer_env.py": (
+        "因果图谱引擎", "已开发", "离线",
+        "`LLM_*` 门控**三态**自证（未设置 / 空 / `=1` 行为须各异）+ 重放旧实现反恒真 + 裸真值门控形态检测（**不联网**，自检项之一）",
+        "python -B test_llm_answer_env.py"),
     "tools/causal/relay_call.py": (
         "因果图谱引擎", "已开发", "**调模型**",
         "通用 OpenAI 兼容中转调用器（SenseNova 等）；key 走 `RELAY_KEY`/`PROBE_KEY`",
@@ -67,6 +90,7 @@ CORE = {
         "宿主数据采集", "已开发", "离线", "重复召回检查", "—"),
     "tools/host/acp_bridge.py": (
         "宿主会话桥", "开发中", "**调模型**",
+        "⛔ **当前不可运行（2026-10-18）**：DSH 已卸载且不重装 ⇒ 运行前提作废。"
         "**ACP 会话桥**：用本机 DSH `--profile acp` 新建/列举/恢复会话并投递交接材料（方案 D）。"
         "零依赖，**内建强制隐私闸门**（材料全文内联、投递前自动过 `name_scan.py`、找不到闸门即拒发）。"
         "`probe`/`list` 只读；`new`/`resume` 会调模型。已注入 `PATHEXT` 修复接续侧 git 不可用",

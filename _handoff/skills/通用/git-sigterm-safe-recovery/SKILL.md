@@ -252,12 +252,74 @@ git diff --cached --name-only
 - **检查串必须从文件里抄**：先 `grep -o` / `sed -n` 打印真实行，再照抄成检查串。
   凭印象写会得到**假阴性**（报 FAIL 而文本其实正确），2026-09-19 一轮内连中三次。
 
-### 生成 `--no-ff` 合并提交（前提：main 是目标分支的祖先）
+### 生成 `--no-ff` 合并提交（**树必须来自 `merge-tree`，不能用分支树**）
 
-祖先关系成立时，**合并结果树 = 目标分支树**，所以完全不需要触碰工作区：
+> 🔴🔴 **本节 2026-09-28 重大修正 —— 原文的写法「只在 main 是分支祖先时正确」，并发时会静默丢数据。**
+>
+> **原文（已废弃）**：
+> ```bash
+> git merge-base --is-ancestor main <branch> || { echo "非快进关系，此方案不适用"; exit 1; }
+> TREE=$(git rev-parse <branch>^{tree})     # ← 仅在 main 是祖先时正确
+> NEW=$(git commit-tree "$TREE" -p main -p <branch>)
+> ```
+> **失效机制（stale-tree）**：该写法成立的**前提**是「main 是分支祖先」，
+> 此时合并结果树恰好 = 分支树。**但本仓有多个会话并发推进 main** ——
+> 一旦 main 被并发推走（**它就不是你的分支的祖先了，而 `--is-ancestor` 会失败**），
+> 你若**跳过或忽略**该检查、仍用 `<branch>^{tree}`，合并提交会把
+> **main 上并发会话的新改动整体静默回退**。
+>
+> **2026-09-28 实测踩到**：一次合并把并发会话刚提交的
+> `memory/2026-09-28.md`（**−53 行**）与 `jvs-index-layer-maintenance/SKILL.md`（**−21 行**）抹掉。
+> ⚠️ **`git diff --stat <并发末态> main` 当时显示为空，极具迷惑性** ——
+> 因为并发会话随后又自己做了三方合并把内容救回；**必须逐 blob 比对才能定性**。
+>
+> **✅ 正解（无条件正确，且天然适配并发）**：
+> ```bash
+> # merge-tree 做真正的三方合并，返回合并结果树；不读写工作区/index/HEAD
+> TREE=$(git merge-tree --write-tree main <branch>) || { echo "有冲突，需仲裁"; exit 1; }
+> NEW=$(printf '%s\n' "$MSG" | git commit-tree "$TREE" -p main -p <branch>)
+> git update-ref -m "merge: <branch>" refs/heads/main "$NEW" "$(git rev-parse main)"  # CAS
+> ```
+> - `git merge-tree --write-tree`（git ≥2.38；本机 2.55 实测可用）**不需要** main 是祖先，
+>   且官方明示「does not read from or write to either the working tree or index」。
+> - ⚠️ **不要**用 `git merge-base --is-ancestor` 当**前置门**：并发场景下它**必然失败**，
+>   而失败不等于「不能合并」，只说明「需要三方合并」。
+> - ⚠️ 真冲突时 `merge-tree` **rc=1**，但**首行仍是带冲突标记的树 sha**（stdout），
+>   冲突清单也在 stdout（`--name-only -z` 可脚本解析），**stderr 为空** —— 别去 stderr 找。
+
+### ⚠️ 多会话共用 `.git/index` ⇒ 提交会被「掺入」他人半成品
+
+`git add` 写的是**全仓唯一的** `.git/index` ⇒ 并发会话下，甲的 `write-tree` 会把
+**乙已 `git add` 但未提交的文件**一并快照（2026-09-28 实测：本应 10 个文件变成 **17** 个）。
+**判据**：`git diff --cached --name-only | wc -l` 与你实际 add 的数量不符。
+
+**✅ 解法 = 临时索引**（`GIT_INDEX_FILE` 指向工作区外的私有索引，互不干扰）：
+`read-tree` 播种 → `git add -- <本批>` → `write-tree` → `commit-tree`。
+⚠️ `mktree` **不接受含 `/` 的路径**（实测 `fatal: path _index/a.json contains slash`）⇒
+要按路径拼树，用临时索引 + `git update-index --cacheinfo` + `write-tree`。
+
+> 🔴🔴 **2026-10-07 补（此前本节缺失这条，照本节做会重现 stale-tree 坑）**：
+> **临时索引播种的基线必须与 `commit-tree -p` 的父是「同一时刻的 main」。**
+> 若先 `read-tree HEAD` 播种、之后 main 被并发推进、再用 `-p main` 提交 ⇒
+> 提交的树以**旧 main** 为底，会**静默回退 main 上的新改动**。
+> **修法**：提交前用「**当时**的 main」重新 `read-tree` 播种；或全程走
+> `merge-tree --write-tree`（三方合并，天然不受影响）。
+> （该警告原先只在 `concurrent-session-merge-arbitration` L92-97 有 —— 见下方指路。）
+
+> 📌 **并发场景的完整版见技能 `concurrent-session-merge-arbitration`**：
+> §二「坑 2：共享 index 污染」（含逐字代码）、§四「优先级仲裁设计」。
+> 本节只保留单人也会踩的最小集；**并发下的仲裁与胜负判定以那份为准**。
+> （2026-10-07 技能库组织审计判定两份**整段重复约 20 行**，且声明「互补」与实际不符 ⇒ 改为**单向指路**。）
+
+### 多会话并发提交的**优先级仲裁**
+
+**见 `concurrent-session-merge-arbitration` §四**（机制：`_handoff/agents/CONCURRENCY.md`
++ `scripts/jvs-arbitrate.py` + `_handoff/agents/PRIORITY.json`，**数字大者胜**，低优先级**被拒绝**）。
+
+#### 生成 `--no-ff` 合并提交（**仅当 main 是分支祖先**时可用旧写法）
 
 ```bash
-git merge-base --is-ancestor main <branch> || { echo "非快进关系，此方案不适用"; exit 1; }
+git merge-base --is-ancestor main <branch> || { echo "非快进关系，改用 merge-tree（见上）"; exit 1; }
 TREE=$(git rev-parse <branch>^{tree})
 NEW=$(printf '%s\n' "$MSG" | git commit-tree "$TREE" -p main -p <branch>)
 git update-ref -m "merge: 合入 <branch>" refs/heads/main "$NEW"

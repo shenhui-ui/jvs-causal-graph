@@ -1,0 +1,52 @@
+{
+  "_doc": [
+    "JVS 多会话并发提交 —— 优先级真值源。",
+    "仲裁器只读本文件；提交信息里写的一切「优先级」一律忽略。",
+    "数字越大优先级越高；冲突时高优先级一方获胜。",
+    "本文件属治理件，仅项目方可改（红线 7：AI 不代签、不擅自改治理裁定）。",
+    "全部改动须走分支 + 门禁，与其它改动同流程。"
+  ],
+  "updated": "2026-09-28",
+  "owner": "项目方（SHENHUI）",
+  "default_priority": 10,
+  "unmarked_priority": 40,
+  "_unmarked_priority_doc": [
+    "target(main) 上「无 JVS-Session 署名」的内容按此优先级对待。",
+    "取 40 的理由：高于临时会话(10)与索引刷新(20)，低于日常开发(50)。",
+    "⇒ 临时会话**不能**覆盖 main 上既有内容（会被拒绝，转人工）；日常开发可以。",
+    "该值是可调策略旋钮：调高=对并发更保守，调低=放行更多自动覆盖。"
+  ],
+  "sessions": {
+    "daily-dev": {
+      "priority": 50,
+      "desc": "日常开发（主线推进）—— 本会话"
+    },
+    "gate-signoff": {
+      "priority": 60,
+      "desc": "验收/签字落档（涉及红线 7，须最高，禁止被并发覆盖）"
+    },
+    "handoff-reminder": {
+      "priority": 30,
+      "desc": "定时交接提醒（自动任务）"
+    },
+    "index-refresh": {
+      "priority": 20,
+      "desc": "索引层刷新（多为生成物，且已被豁免仲裁）"
+    },
+    "ad-hoc": {
+      "priority": 10,
+      "desc": "临时 / 未声明会话的回落身份"
+    }
+  },
+  "_generated_paths": [
+    "以下路径的冲突**豁免仲裁**：一律保留 ours，并列入「待重生成」清单。",
+    "理由：它们应由生成器产出，不应由仲裁器裁决（见 jvs-index-layer-maintenance 技能）。"
+  ],
+  "generated_prefixes": [
+    "_index/"
+  ],
+  "generated_files": [
+    "_handoff/PENDING.md",
+    "_handoff/scripts/SCRIPTS.md"
+  ]
+}

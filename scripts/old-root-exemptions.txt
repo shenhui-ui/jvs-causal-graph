@@ -1,0 +1,4 @@
+# 旧根引用守卫（git-gate [11] / scripts/old-root-guard.py）白名单。
+# 登记理由逐条（立项件 §6：留痕文档被改时，其旧根引用须在此显式登记）：
+_handoff/PENDING.md
+_handoff/OLD-ROOT-EXEMPTION.md

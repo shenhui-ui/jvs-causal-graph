@@ -50,6 +50,7 @@
   —— ❌ **仍缺**（这是上游脚本自带的子命令，与本宿主能力无关，**移植脚本即得**）
 - 跨会话寻址：`create_thread` / `list_projects` / `send_message_to_thread` / `fork_thread`
   —— ⚠️ **部分等价，且成品桥已交付**：本机 DSH `--profile acp` 提供
+  🔴 **（2026-10-18 订正：DSH 已卸载且不重装 ⇒ 该等价路径当前不可用，缺口 3 回到「未解决」）**
   `session/new` / `session/prompt` / `session/list` / `session/resume`，**逐项对应**
   （零安装：DSH 与 `@agentclientprotocol/sdk` v1.4.0 均已就位，Apache-2.0）。
   ⭐ **成品桥** = `01-host-product/2026-08-28-20-59-40/tools/host/acp_bridge.py` + `README-acp-bridge.md`。
@@ -167,6 +168,16 @@
 > 实测**新建 / 投递 / 续投 / 软约束生效 / 闸门拦截 / fail-closed** 全通过。
 > ⚠️ **但仍是半成品**：与 `HANDOFF.md` §12 登记表**未自动联动**（登记行仍靠人写），
 > 且**触发条件仍无解**（缺口 1/2）⇒ `status_map` 中方案 D 记「**开发中**」。
+
+> ⛔ **订正块（2026-10-18）—— 方案 D 的运行前提已作废**
+> 本机 **DSH 已完全卸载**，且项目方 **2026-10-07 明确裁定「不重装」**。
+> **现测判据**（2026-10-18 全部现跑）：`ls -d ~/.workbuddy-ai/binaries/node/dsh-install-*` ⇒ **0 命中**；
+> `npm ls -g` 无 `@deepseek-ai/dsh`；`~/.dsh/dsh-web.cmd` **不存在**；3080 端口 **无监听**；
+> `~/.dsh/settings.yaml` 已改名 `settings.yaml.imported`。
+> ⇒ **ACP 桥 / 方案 D 在「重装 DSH」之前不可运行**；下文的**能力结论保留为 2026-09-19 实测留痕**（不撤回）。
+> ⚠️ ⭐ **连带后果：「跨会话寻址工具」缺口重新变为「未解决」** —— 原先多处记「**已由成品桥解决**」，
+> **该说法不再成立**（见 `_migrate/status_map.py` 的「DSH 不重装」裁定条目；技能 `jvs-acp-session-bridge` 顶部订正块）。
+> 📌 **本次只补事实订正、不改任何状态列语义** —— 「方案 D 是否正式改写为『不可行』」属项目方裁定（红线 7），AI 不代签。
 
 用 `dsh --profile acp`（ACP stdio）+ `@agentclientprotocol/sdk` v1.4.0，实现四件事：
 

@@ -64,6 +64,12 @@ node_modules/
 # ---------- 编辑器与系统文件 ----------
 .vscode/
 .idea/
+.zcode/
+# ⚠️ 2026-10-07 新增：`.workbuddy/` 是宿主 / 子 agent 的**临时工作目录**
+# （实测：被派的 agent 把会话记忆写到了 `.workbuddy/memory/` 而不是 `.workbuddy-ai/memory/`）
+# ⇒ 既不入库、也不入索引（classify.py 的 SKIP_DIRS 同步加了它）。
+# 与 `.zcode/`（同类工具目录）待遇一致。
+.workbuddy/
 .DS_Store
 Thumbs.db
 desktop.ini

@@ -63,17 +63,21 @@ RULES = [
     # ===== 09 工程与运维 =====
     ("09 工程与运维", "迁移与索引", lambda p: has("migration-plan-")(p)
         or p.startswith("_index\\") or p.startswith("_migrate\\")),
+    # 2026-10-20：`_staging/` 首次有**入库**产物（旧根普查件）——此前该目录只有
+    # 未跟踪暂存物 ⇒ 落 99 未归类。规则与 status_map.py 的 ("09 工程与运维","执行暂存与证据") 同步。
+    ("09 工程与运维", "执行暂存与证据", starts("_staging\\")),
     ("09 工程与运维", "接手包与技能", starts("_handoff\\")),
     ("09 工程与运维", "门禁与钩子", starts("scripts\\", ".githooks\\")),
     ("09 工程与运维", "导航文档", lambda p: "\\" not in p and base_is(
         "README.md", "MIGRATION-RECORD.md", "PROJECT-OVERVIEW.md")(p)),
-    ("09 工程与运维", "仓库配置", base_is(".gitattributes", ".gitignore", "GIT-POLICY.md")),
+    ("09 工程与运维", "仓库配置", base_is(".gitattributes", ".gitignore", "GIT-POLICY.md", "requirements.txt")),
     # 「项目审计」= 仓库级治理文档（物理整理审计 / 重构方案与阶段判据 / 规范对齐方案），非单模块文档
     # ⚠️ 新增仓库级治理文档时必须同步本行 + status_map.py 的 ("09 工程与运维", "项目审计")，
     #    否则该文档会落到兜底桶 FALLBACK = ("99 未归类", "待人工归位")。
     # ⚠️ 「非预期新增」的兜底检查**不在本文件**（本文件只打印 `扫描物理文件: N` + 各 L1/L2 明细）——
     #    它在 jvs-index-layer-maintenance 技能「校验」节的 `未归类` 检查（`k.startswith('99')`），须自己跑。
     ("09 工程与运维", "项目审计", lambda p: has("project-audit-")(p)
+        or base_starts("PROJECT-REVIEW-")(p)
         or base_is("ORGANIZATION-AUDIT.md", "REFACTOR-PLAN.md", "PHASE-C-PLAN.md",
                    "DEV-STANDARDS-ALIGNMENT-PLAN.md")(p)),
 
@@ -177,6 +181,14 @@ RULES = [
 FALLBACK = ("99 未归类", "待人工归位")
 
 SKIP_DIRS = {".git", "__pycache__", "node_modules", ".workbuddy-ai"}
+# ⚠️ 2026-10-07：`.workbuddy/`（无 `-ai`）是宿主 / 子 agent 的**临时工作目录**，
+# 实测子 agent 会把会话记忆写进 `<仓库根>/.workbuddy/memory/` ⇒ 会污染索引。
+# ⛔ **不能把它塞进 SKIP_DIRS** —— 那是**按目录名在任意层级匹配**，
+#    而本仓在 `01-host-product/.../docs/host_memory_dump/bridge/.workbuddy/` 下有
+#    **一处被 git 跟踪的合法目录**（`memory/automations/*/memory.md`，14 KB）。
+#    实测：塞进 SKIP_DIRS 会让该文件**从索引消失**（「库内有 ⇒ 索引无」）。
+# ⇒ 正解 = **只锚定仓库根**，见下方 walk 里的 ROOT_SKIP。
+ROOT_SKIP = {os.path.normpath(os.path.join(JVS, ".workbuddy"))}
 
 
 def classify(rel):
@@ -194,7 +206,8 @@ def main():
     rows = []
     for dp, dn, fn in os.walk(JVS):
         dn[:] = [d for d in dn if not os.path.islink(os.path.join(dp, d))
-                 and d not in SKIP_DIRS]
+                 and d not in SKIP_DIRS
+                 and os.path.normpath(os.path.join(dp, d)) not in ROOT_SKIP]
         if os.path.normpath(dp).startswith(os.path.normpath(IDX)):
             dn[:] = []
             continue

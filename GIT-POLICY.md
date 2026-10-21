@@ -114,17 +114,25 @@ git symbolic-ref HEAD refs/heads/chore-你的改动名
 bash scripts/git-gate.sh                  # 门禁必须全绿
 git add -A && git commit -m "feat(模块): 说明"
 
-# ② 以 --no-ff 拓扑合入 main（前提：main 是当前分支的祖先）
-git merge-base --is-ancestor main HEAD || { echo "非快进关系，需人工处理"; exit 1; }
-TREE=$(git rev-parse 'HEAD^{tree}')
+# ② 以 --no-ff 拓扑合入 main
+#    ⚠️ 2026-09-28 修正：**树必须来自 merge-tree，不能用分支树** ——
+#       本仓有多个会话并发推进 main，用 <branch>^{tree} 会把 main 上
+#       并发会话的新改动**静默回退**（实测踩到，详见技能 git-sigterm-safe-recovery
+#       与 _handoff/agents/CONCURRENCY.md）。
+TREE=$(git merge-tree --write-tree main HEAD) || { echo "有冲突，需仲裁"; exit 1; }
 NEW=$(printf 'merge: chore-你的改动名\n' | git commit-tree "$TREE" -p main -p HEAD)
-git update-ref -m "merge: chore-你的改动名" refs/heads/main "$NEW"
+git update-ref -m "merge: chore-你的改动名" refs/heads/main "$NEW" "$(git rev-parse main)"
 git symbolic-ref HEAD refs/heads/main
 git branch -d chore-你的改动名
 ```
 
 > 该流程产出的**两父拓扑与 `git merge --no-ff` 完全一致**，
 > 已在 2026-09-19 用于 `5ca4991` / `cff291c` / `f22549b` 三次合并。
+>
+> ⚠️ **多会话并发时**：`git update-ref` 的第三个参数（期望旧值）是 **CAS**，
+> main 被并发推走即拒绝 —— **不要用 `-f` 绕过**。
+> 若两个会话**同时**要合并，走优先级仲裁：`python scripts/jvs-arbitrate.py`
+> （见 `_handoff/agents/CONCURRENCY.md`）。
 
 ---
 
