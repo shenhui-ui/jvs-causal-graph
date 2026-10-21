@@ -488,6 +488,27 @@ def build_prompt(q, anchor, chain, evs, extra_anchors=None, neighbors=None):
     return "\n".join(lines)
 
 
+def _min_bigram(default=6):
+    """hybrid 检索的 2-gram 准入阈值（环境变量 LLM_MIN_BIGRAM，缺省 6 = 历史行为）。
+
+    为什么做成开关而不是直接改默认值：
+    D11 敏感性实测（2026-10-21）k 取 3/5/8/10 时 gold 锚点召回**完全一致**（7/10），
+    唯一有效的杠杆是这条准入阈值 —— 6 -> 4 时召回升到 9/10（补回 H08/H10）。
+    但该参数同时是 M1-30 与 D10 既有结论所依赖的输入
+    ⇒ 不改默认值，只在**显式设置**时生效，保证跨题集回归不被牵动。
+
+    取值域 [0, 20]；非整数 / 越界一律回落默认（**不静默取 0** —— 0 会让全库事件准入）。
+    """
+    raw = os.environ.get("LLM_MIN_BIGRAM")
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        v = int(raw.strip())
+    except ValueError:
+        return default
+    return v if 0 <= v <= 20 else default
+
+
 def prepare_question(db_path, q, events):
     """Reuse the generation retrieval path without credentials or model calls."""
     evs = {e["id"]: e for e in events}
@@ -495,7 +516,8 @@ def prepare_question(db_path, q, events):
            else extract_keywords)(q.get("question", ""))
     anchors = retrieve_top(events, kws, k=3, question=q.get("question", ""))
     if os.environ.get("LLM_RETRIEVE_HYBRID", "1") != "0":
-        anchors = retrieve_hybrid(events, kws, q.get("question", ""), k=3) or anchors
+        anchors = retrieve_hybrid(events, kws, q.get("question", ""), k=3,
+                                  min_bigram=_min_bigram()) or anchors
     fallback_used = 0
     if env_flag("LLM_FALLBACK") and not anchors:
         fb = retrieve_fallback(events, q.get("question", ""), k=3)
