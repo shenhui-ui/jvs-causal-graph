@@ -6,21 +6,31 @@ agent_created: true
 
 # JVS ACP 会话桥（dsh --profile acp）
 
-## ⛔ 本技能**永久不可用** —— 本机 DSH 已卸载，且项目方 2026-10-07 决定**不重装**
+## ✅ 前提已恢复（2026-10-21 现测订正）—— 但端到端尚未重跑
 
-> **2026-10-07 实测**：`ls -d ~/.workbuddy-ai/binaries/node/dsh-install-*` ⇒ **0 命中**；
-> `npm ls -g | grep deepseek` ⇒ 无 `@deepseek-ai/dsh`；`~/.dsh/dsh-web.cmd` 不存在；
-> 3080 无监听（详见技能 `launch-dsh` 的「前置状态」表与
-> `_handoff/技能库组织审计-20261007.md` §4.3）。
-> 🔴 **项目方决定：DSH 不重装** ⇒ **本技能的全部命令（`dsh --profile acp`）不会再可用**。
+> 🔴 **2026-10-21 订正**：项目方告知「DSH 不用重装了，已经出桌面端了，已经下载」⇒ 现测复核：
+> **DSH 桌面端 `0.2.0-rc.2` 已装**（`%LOCALAPPDATA%/Programs/DeepSeek Harness.new-{…}`），
+> `~/.dsh/profiles/` 下 `acp` / `desktop` / `headless` / `web` **四个 profile 均在**。
 >
-> ⚠️ **但结论不跟着失效**：本技能记录的**能力结论**（DSH 的 ACP profile 提供
-> `session/new | prompt | list | resume`，可编程寻址会话）**是 2026-09-19 的实测事实**，
-> 且**成品桥 `tools/host/acp_bridge.py` 已交付并实测通过**（含强制隐私闸门 fail-closed）。
-> ⇒ 本技能转为**历史实测留痕**：**不要再按本技能去建会话**。
-> ⇒ ⭐ **连带后果（已登记）**：`_handoff/NEXT-交接提醒自动化.md` §5「方案 D：ACP 桥」的**运行前提作废**；
-> 「跨会话寻址工具」缺口**重新变为未解决**（原先记「已由成品桥解决」的说法**不再成立**）；
-> `_handoff/NEXT-交接提醒自动化.md` §5 引用的该路径随之不可用。
+> ⭐ **CLI 可直调（绕过 `.cmd`，本环境可跑）**：
+>
+> ```bash
+> ROOT="$LOCALAPPDATA/Programs/DeepSeek Harness.new-{3794D57F-9324-4449-B22A-A9A5E10BEF54}"
+> CLI="$ROOT/resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js"
+> cd "$ROOT" && ELECTRON_RUN_AS_NODE=1 "./DeepSeek Harness.exe" --expose-internals "$CLI" --profile acp
+> ```
+>
+> 实测：`--version` ⇒ **`0.2.0-rc.2`**；`--profile acp --dump-config` ⇒ **正常输出**
+> （`@deepseek-ai/dsh-base` + `dsh-acp-app` patch 生效）⇒ **ACP profile 可加载**。
+>
+> ⚠️ **「可加载」≠「端到端可用」**：`session/new` / `prompt` / `list` / `resume` **尚未重跑**
+> ⇒ 本技能正文的实测结论仍是 **2026-09-19** 的，**用前须先复跑一次**（成本：1 次 session/new，不调 LLM）。
+> ⚠️ **2026-10-07「已完全卸载」的判据口径错**：那批（`dsh-install-*` 0 命中 / 全局 npm 无该包 / 3080 无监听）
+> 只证明 **npm 安装路径**为空，**证明不了「本机无 DSH」** —— 桌面端 9-28 就已装。
+> 教训：**「某条安装路径为空」≠「该软件不存在」**（同族：`launch-dsh` 被这条断言带偏 2 周）。
+> ⚠️ 连带订正：`_handoff/NEXT-交接提醒自动化.md` §5「方案 D」的运行前提**恢复**；
+> 「跨会话寻址工具」缺口回到「**已由成品桥解决，待端到端复验**」。
+
 
 ## 这个技能解决什么
 

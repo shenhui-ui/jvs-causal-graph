@@ -6,7 +6,32 @@ agent_created: true
 
 # 唤起 DSH（DeepSeek Harness）
 
-## ⛔ 前置状态：**本机 DSH 已于 2026-10-07 前完全卸载**（先读这段）
+## ✅ 前置状态：**桌面端 0.2.0-rc.2 可用**（2026-10-21 现测订正，先读这段）
+
+> 🔴 **2026-10-21 订正**：项目方告知「DSH 不用重装了，已经出桌面端了，已经下载」⇒ 现测复核：
+> 桌面端 **`DeepSeek Harness 0.2.0-rc.2`** 已装于 `%LOCALAPPDATA%/Programs/DeepSeek Harness.new-{…}`，
+> `~/.dsh/profiles/` 下 `acp` / `desktop` / `headless` / `web` **四个 profile 均在**。
+>
+> ⭐ **CLI 可直调（绕过 `.cmd`，本环境可跑）**：
+>
+> ```bash
+> ROOT="$LOCALAPPDATA/Programs/DeepSeek Harness.new-{3794D57F-9324-4449-B22A-A9A5E10BEF54}"
+> CLI="$ROOT/resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js"
+> cd "$ROOT" && ELECTRON_RUN_AS_NODE=1 "./DeepSeek Harness.exe" --expose-internals "$CLI" --help
+> ```
+>
+> 实测：`--version` ⇒ **`0.2.0-rc.2`**；`--profile acp --dump-config` ⇒ **正常输出**。
+> 桌面端另有 GUI（双击 `DeepSeek Harness.exe`）。
+>
+> ⚠️ **2026-10-07 那批判据口径错**：只证明 **npm 安装路径**为空（`dsh-install-*` 0 命中 / 全局 npm 无包），
+> **证明不了「本机无 DSH」**（桌面端 9-28 就已装）。
+> 教训：**「某条安装路径为空」≠「该软件不存在」**。
+> ⚠️ 下文「环境事实（2026-09-10 快照）」里的 `dsh-install-*` 路径**已不适用**，改用上面的 `ROOT` / `CLI` 变量。
+
+---
+
+
+## ⚠️ 历史前置状态（2026-10-07，**已过期**，仅作留痕）
 
 > **2026-10-07 实测**（逐条 `test -e` / `netstat` / `npm ls -g`）：
 >
