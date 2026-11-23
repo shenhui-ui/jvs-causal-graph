@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jvs"
+description = "JVS: Temporal-Causal Knowledge Graph & Cross-Session Causal QA"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+dynamic = ["version"]
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.10",
+    "pydantic-settings>=2.6",
+    "openai>=1.60",
+    "tenacity>=9.0",
+    "networkx>=3.4",
+    "typer>=0.15",
+    "rich>=13.9",
+    "ruamel.yaml>=0.18",
+    "python-dotenv>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/shenhui-ui/jvs-causal-graph"
+Repository = "https://github.com/shenhui-ui/jvs-causal-graph"
+
+[project.optional-dependencies]
+vec = ["sqlite-vec>=0.1.6"]
+mcp = ["mcp>=2.0"]
+dev = ["pytest>=8.0", "ruff>=0.9"]
+all = ["jvs[vec,mcp,dev]"]
+
+[project.scripts]
+jvs = "jvs.cli.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "jvs.__version__"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

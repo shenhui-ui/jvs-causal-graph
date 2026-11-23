@@ -1,0 +1,3 @@
+{"qid": "Q001", "question": "为什么把数据库连接池从20扩容到60？", "type": "为什么改", "gold_answer": {"cause": "压测显示连接池等待超时", "effect": "决定把连接池上限从20扩容到60并上线", "evidence_hint": "EX1 EX2"}}
+{"qid": "Q002", "question": "支付超时重试策略改成先主动查单补偿的原因是什么？", "type": "为什么改", "gold_answer": {"cause": "直接重试可能触发重复扣款", "effect": "修改为先主动查单补偿并安排灰度", "evidence_hint": "EX4"}}
+{"qid": "Q003", "question": "本地缓存默认TTL为什么从60秒调整为300秒？", "type": "为什么改", "gold_answer": {"cause": "减少穿透", "effect": "默认TTL从60秒调整为300秒", "evidence_hint": "EX6"}}
