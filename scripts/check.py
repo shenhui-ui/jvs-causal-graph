@@ -64,6 +64,7 @@ def _check_secrets() -> bool:
         *(ROOT / "docs").rglob("*.md"),
         ROOT / "LICENSE",
         ROOT / "README.md",
+        ROOT / "README.zh-CN.md",
         ROOT / "pyproject.toml",
         ROOT / ".env.example",
     ]

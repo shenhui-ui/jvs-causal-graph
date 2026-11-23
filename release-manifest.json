@@ -1,7 +1,7 @@
 {
   "schema": "jvs-public-v2-manifest/1",
-  "file_count": 54,
-  "total_bytes": 316621,
+  "file_count": 55,
+  "total_bytes": 324909,
   "files": [
     {
       "path": ".env.example",
@@ -75,13 +75,18 @@
     },
     {
       "path": "README.md",
-      "bytes": 6097,
-      "sha256": "6b120ddd3af0d1faf2cef9118e33c65cf5ef63244e64af760e72316d3842e169"
+      "bytes": 7082,
+      "sha256": "8d299144a2a0c0464a7929275d1b973a4658e91d229a004d7adcb350f86e78bb"
+    },
+    {
+      "path": "README.zh-CN.md",
+      "bytes": 7269,
+      "sha256": "158790911bf737d635ec5b0d9b2c801c8cf8fd6efb9b70bb562fd509a8492fcc"
     },
     {
       "path": "scripts/check.py",
-      "bytes": 3822,
-      "sha256": "d2771f099168acd91cc54357b99cceb7fe7ba4fed316d47b4088c7db432b1454"
+      "bytes": 3856,
+      "sha256": "97cb4086b7a20a3d069ef93b149188fecc56ca1f0440687462cd061c7a71caca"
     },
     {
       "path": "src/jvs/__init__.py",

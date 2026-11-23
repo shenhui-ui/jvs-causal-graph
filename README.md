@@ -1,5 +1,9 @@
 # JVS — Temporal-Causal Knowledge Graph & Cross-Session Causal QA (v2.0)
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
+[![JVS CI](https://github.com/shenhui-ui/jvs-causal-graph/actions/workflows/ci.yml/badge.svg)](https://github.com/shenhui-ui/jvs-causal-graph/actions/workflows/ci.yml) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 JVS is a lightweight, local-first **temporal-causal knowledge graph** and **cross-session causal QA** engine designed for personal AI agents. Unlike generic RAG or flat agent memory systems, JVS enforces:
 
 1. **Directed Causal Ontology & Confidence Gating**: Events (`subject / action / object / before / after / reason / ts / source_hash`) connected by typed, strength-graded edges (`strong`, `weak`, `pending`). Low-confidence (`<= 0.6`) edges are kept as 1-hop clues (`pending`) and prevented from polluting multi-hop reasoning.
@@ -7,6 +11,22 @@ JVS is a lightweight, local-first **temporal-causal knowledge graph** and **cros
 3. **M1-11 Graceful Degradation**: Automatic classification (`no_chain`, `low_confidence`, `weak_only`) driven by `assets/fallback.yaml`, preventing fabricated causal claims when evidence is thin.
 4. **Fail-Closed Outbound Privacy Gate**: Inspects all payloads for known names (NFKC + casefold), credentials, and PII *before* any LLM or embedding call.
 5. **Zero External Server Dependencies**: Runs on a single local SQLite file with **FTS5 trigram** full-text search, optional **sqlite-vec** vector search, **NetworkX** structural analytics, **Typer** CLI, and an **MCPServer** (`mcp >= 2.0`).
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A["Raw Notes / Events"] --> B["PrivacyGate (Fail-Closed)"]
+    B --> C["SQLite FTS5 + sqlite-vec RRF"]
+    C --> D["Causal Graph (strong / weak / pending)"]
+    D --> E["2-State Bidirectional BFS"]
+    E --> F["M1-11 Graceful Degradation"]
+    F --> G["CLI / Python SDK / MCP 2.x Server"]
+```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for layered dependency boundaries, confidence gating rules, and evaluation guarantees.
 
 ---
 
@@ -112,6 +132,8 @@ Exposed MCP tools: `causal_search`, `causal_why`, `causal_timeline`, `causal_ask
 ```text
 jvs-causal-graph/
 ├── LICENSE                  # MIT License
+├── README.md                # English documentation
+├── README.zh-CN.md          # Simplified Chinese documentation
 ├── pyproject.toml           # Package manifest, dependencies, pytest & ruff config
 ├── .env.example             # Safe configuration template
 ├── .github/workflows/ci.yml # GitHub Actions CI workflow
