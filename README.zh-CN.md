@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-[![JVS CI](https://github.com/shenhui-ui/jvs-causal-graph/actions/workflows/ci.yml/badge.svg)](https://github.com/shenhui-ui/jvs-causal-graph/actions/workflows/ci.yml) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/jvs-causal-graph.svg)](https://pypi.org/project/jvs-causal-graph/) [![JVS CI](https://github.com/shenhui-ui/jvs-causal-graph/actions/workflows/ci.yml/badge.svg)](https://github.com/shenhui-ui/jvs-causal-graph/actions/workflows/ci.yml) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 JVS 是一个轻量级、本地优先的**时序-因果知识图谱**与**跨会话因果问答（Causal QA）**引擎，专为个人 AI Agent 设计。不同于常规 RAG 或扁平化的 Agent 记忆存储，JVS 在架构上强制执行以下机制：
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-[![JVS CI](https://github.com/shenhui-ui/jvs-causal-graph/actions/workflows/ci.yml/badge.svg)](https://github.com/shenhui-ui/jvs-causal-graph/actions/workflows/ci.yml) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/jvs-causal-graph.svg)](https://pypi.org/project/jvs-causal-graph/) [![JVS CI](https://github.com/shenhui-ui/jvs-causal-graph/actions/workflows/ci.yml/badge.svg)](https://github.com/shenhui-ui/jvs-causal-graph/actions/workflows/ci.yml) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 JVS is a lightweight, local-first **temporal-causal knowledge graph** and **cross-session causal QA** engine designed for personal AI agents. Unlike generic RAG or flat agent memory systems, JVS enforces:
 
