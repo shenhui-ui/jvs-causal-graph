@@ -90,12 +90,12 @@ def _check_bundled_assets_sync() -> bool:
     root_assets = ROOT / "assets"
     pkg_assets = ROOT / "src" / "jvs" / "assets"
     expected = {
-        p.relative_to(root_assets): p.read_bytes()
+        p.relative_to(root_assets): p.read_bytes().replace(b"\r\n", b"\n")
         for p in sorted(root_assets.rglob("*"))
         if p.is_file()
     }
     bundled = {
-        p.relative_to(pkg_assets): p.read_bytes()
+        p.relative_to(pkg_assets): p.read_bytes().replace(b"\r\n", b"\n")
         for p in sorted(pkg_assets.rglob("*"))
         if p.is_file()
     }
