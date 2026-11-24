@@ -4,7 +4,7 @@ from jvs.application.engine import CausalEngine
 from jvs.config import JVSSettings
 from jvs.domain.models import CausalEdge, Event, QAAnswer, Question
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 __all__ = [
     "CausalEdge",

@@ -39,7 +39,25 @@ jobs:
           jvs graph ingest --db "$tmpdir/demo.db" --events examples/events.jsonl --edges examples/edges.jsonl
           jvs graph stats --db "$tmpdir/demo.db"
           jvs graph why EX1 --db "$tmpdir/demo.db"
-          jvs qa ask "为什么把连接池从20扩容到60？" --db "$tmpdir/demo.db" --offline
+          jvs qa ask "为什么把数据库连接池从20扩容到60？" --db "$tmpdir/demo.db" --offline
           jvs qa run --db "$tmpdir/demo.db" --questions examples/questions.jsonl --out "$tmpdir/out" --offline
           jvs eval score --answers "$tmpdir/out/answers.jsonl" --questions "$tmpdir/out/gold.jsonl"
           rm -rf "$tmpdir"
+
+      - name: Verify built wheel runs standalone CLI outside repo
+        run: |
+          python -m pip install build twine
+          python -m build
+          python -m twine check dist/*
+          tmpdir="$(mktemp -d)"
+          python -m venv "$tmpdir/venv"
+          "$tmpdir/venv/bin/pip" install --quiet dist/*.whl
+          cp examples/events.jsonl examples/edges.jsonl "$tmpdir/"
+          (
+            cd "$tmpdir"
+            "$tmpdir/venv/bin/python" -c "from jvs.config import JVSSettings; p = JVSSettings().resolve_assets_dir(); assert (p / 'fallback.yaml').is_file(), p"
+            "$tmpdir/venv/bin/jvs" graph init --db "$tmpdir/wheel.db"
+            "$tmpdir/venv/bin/jvs" graph ingest --db "$tmpdir/wheel.db" --events "$tmpdir/events.jsonl" --edges "$tmpdir/edges.jsonl"
+            "$tmpdir/venv/bin/jvs" qa ask "为什么把数据库连接池从20扩容到60？" --db "$tmpdir/wheel.db" --offline
+          )
+          rm -rf "$tmpdir" dist build src/*.egg-info

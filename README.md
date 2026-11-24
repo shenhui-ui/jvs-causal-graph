@@ -34,6 +34,16 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for layered dependency boundari
 
 ### 1. Install
 
+Install via pip (PyPI package name: `jvs-causal-graph`, Python 3.11+):
+
+```bash
+pip install jvs-causal-graph
+# With sqlite-vec vector search & MCP 2.x Server extras:
+pip install "jvs-causal-graph[vec,mcp]"
+```
+
+Or install editable from source for local development:
+
 ```bash
 pip install -e ".[all]"
 ```
@@ -136,10 +146,11 @@ jvs-causal-graph/
 ├── README.zh-CN.md          # Simplified Chinese documentation
 ├── pyproject.toml           # Package manifest, dependencies, pytest & ruff config
 ├── .env.example             # Safe configuration template
-├── .github/workflows/ci.yml # GitHub Actions CI workflow
+├── .github/workflows/       # GitHub Actions CI & PyPI OIDC publish workflows
 ├── assets/                  # Versioned prompts & M1-11 fallback.yaml
 ├── examples/                # Sanitized runnable sample dataset
 ├── src/jvs/
+│   ├── assets/              # Packaged copy of prompts & fallback.yaml for wheel installs
 │   ├── config.py            # pydantic-settings configuration & provider presets
 │   ├── domain/              # Pure Pydantic models, causal rules, 2-state BFS, NetworkX analytics
 │   ├── infrastructure/      # PrivacyGate, SQLite+FTS5+sqlite-vec store, Hybrid RRF, OpenAI+Tenacity

@@ -86,6 +86,32 @@ def _check_secrets() -> bool:
     return True
 
 
+def _check_bundled_assets_sync() -> bool:
+    root_assets = ROOT / "assets"
+    pkg_assets = ROOT / "src" / "jvs" / "assets"
+    expected = {
+        p.relative_to(root_assets): p.read_bytes()
+        for p in sorted(root_assets.rglob("*"))
+        if p.is_file()
+    }
+    bundled = {
+        p.relative_to(pkg_assets): p.read_bytes()
+        for p in sorted(pkg_assets.rglob("*"))
+        if p.is_file()
+    }
+    if expected.keys() != bundled.keys():
+        missing = sorted(str(k) for k in expected.keys() - bundled.keys())
+        extra = sorted(str(k) for k in bundled.keys() - expected.keys())
+        print(f"[FAIL] Bundled assets mismatch: missing={missing}, extra={extra}")
+        return False
+    dirty = [str(k) for k, raw in expected.items() if bundled[k] != raw]
+    if dirty:
+        print(f"[FAIL] Bundled assets content drift: {dirty}")
+        return False
+    print(f"[OK]   Bundled package assets in sync ({len(bundled)} files)")
+    return True
+
+
 def _check_restricted_untracked() -> bool:
     proc = subprocess.run(
         ["git", "ls-files", "04-restricted-materials"],
@@ -122,6 +148,7 @@ def main() -> int:
     )
     ok &= _run([sys.executable, "-m", "pytest"], "pytest")
     ok &= _check_src_decoupling()
+    ok &= _check_bundled_assets_sync()
     ok &= _check_secrets()
     ok &= _check_restricted_untracked()
     print("=" * 40)

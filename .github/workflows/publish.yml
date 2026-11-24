@@ -1,0 +1,47 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    name: Build & Publish jvs-causal-graph
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build & test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[all]" build twine
+
+      - name: Verify release tag matches package version
+        if: github.event_name == 'release'
+        run: python -c "import os, jvs; tag = os.environ['GITHUB_REF_NAME'].lstrip('v'); assert tag == jvs.__version__, f'{tag} != {jvs.__version__}'"
+
+      - name: Run quality gate
+        run: python scripts/check.py
+
+      - name: Build sdist and wheel
+        run: |
+          rm -rf dist build
+          python -m build
+          python -m twine check dist/*
+
+      - name: Publish distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

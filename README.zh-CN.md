@@ -34,6 +34,16 @@ flowchart LR
 
 ### 1. 安装与环境配置
 
+通过 pip 安装（PyPI 包名：`jvs-causal-graph`，需 Python 3.11+）：
+
+```bash
+pip install jvs-causal-graph
+# 启用 sqlite-vec 向量检索与 MCP 2.x Server：
+pip install "jvs-causal-graph[vec,mcp]"
+```
+
+如需本地源码开发：
+
 ```bash
 pip install -e ".[all]"
 ```
@@ -136,10 +146,11 @@ jvs-causal-graph/
 ├── README.zh-CN.md          # 简体中文文档
 ├── pyproject.toml           # 包配置、依赖与 pytest / ruff 规则
 ├── .env.example             # 安全环境变量模板
-├── .github/workflows/ci.yml # GitHub Actions CI 工作流
+├── .github/workflows/       # GitHub Actions CI 与 PyPI OIDC 发布工作流
 ├── assets/                  # 版本化提示词与 M1-11 fallback.yaml
 ├── examples/                # 脱敏可运行示例数据集
 ├── src/jvs/
+│   ├── assets/              # 随 Wheel 打包的内置提示词与 fallback.yaml
 │   ├── config.py            # pydantic-settings 配置与厂商预设
 │   ├── domain/              # 纯 Pydantic 模型、因果规则、双态 BFS、NetworkX 分析
 │   ├── infrastructure/      # PrivacyGate、SQLite+FTS5+sqlite-vec 存储、混合 RRF 检索、OpenAI+Tenacity

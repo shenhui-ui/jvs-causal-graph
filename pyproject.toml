@@ -3,11 +3,32 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "jvs"
+name = "jvs-causal-graph"
 description = "JVS: Temporal-Causal Knowledge Graph & Cross-Session Causal QA"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [{ name = "shenhui-ui" }]
+keywords = [
+    "ai-agent",
+    "causal-reasoning",
+    "knowledge-graph",
+    "agent-memory",
+    "mcp",
+    "sqlite",
+    "privacy",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dynamic = ["version"]
 requires-python = ">=3.11"
 dependencies = [
@@ -25,12 +46,13 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/shenhui-ui/jvs-causal-graph"
 Repository = "https://github.com/shenhui-ui/jvs-causal-graph"
+Issues = "https://github.com/shenhui-ui/jvs-causal-graph/issues"
 
 [project.optional-dependencies]
 vec = ["sqlite-vec>=0.1.6"]
 mcp = ["mcp>=2.0"]
 dev = ["pytest>=8.0", "ruff>=0.9"]
-all = ["jvs[vec,mcp,dev]"]
+all = ["jvs-causal-graph[vec,mcp,dev]"]
 
 [project.scripts]
 jvs = "jvs.cli.main:main"
@@ -41,12 +63,15 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+jvs = ["assets/*.yaml", "assets/prompts/*.md"]
+
 [tool.setuptools.dynamic]
 version = {attr = "jvs.__version__"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src", "."]
 addopts = "-q"
 
 [tool.ruff]

@@ -152,6 +152,7 @@ class JVSSettings(BaseSettings):
         if self.assets_dir is not None:
             return self.assets_dir.resolve()
         candidates = [
+            Path(__file__).resolve().parent / "assets",
             Path(__file__).resolve().parents[2] / "assets",
             Path.cwd() / "assets",
         ]
